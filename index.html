@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Speed Dash Auto Boost</title>
+  <title>Speed Dash Ultra Push</title>
   <style>
     :root {
       --ctrl-opacity: 0.72;
@@ -298,6 +298,8 @@
 
       shield: false,
 
+      squash: 0,
+
       trail: []
     };
 
@@ -343,6 +345,7 @@
     let musicGain = null;
     let sfxGain = null;
     let delayNode = null;
+    let musicFilter = null;
     let musicTimer = null;
     let musicStep = 0;
     let muted = false;
@@ -419,9 +422,9 @@
       feedback.connect(delayNode);
       delayNode.connect(masterGain);
 
-      const musicFilter = audioCtx.createBiquadFilter();
+      musicFilter = audioCtx.createBiquadFilter();
       musicFilter.type = "lowpass";
-      musicFilter.frequency.value = 7500;
+      musicFilter.frequency.value = 6500;
 
       musicGain.connect(musicFilter);
       musicFilter.connect(masterGain);
@@ -1114,6 +1117,7 @@
       player.loop = null;
       player.rail = null;
       player.shield = false;
+      player.squash = 0;
     }
 
     /* ---------------- INPUT ---------------- */
@@ -1409,6 +1413,7 @@
         player.jumping = true;
         player.rolling = false;
         player.doubleUsed = false;
+        player.squash = 0;
         sfxJump();
       } else if (DOUBLE_JUMP && jumpPressed && !player.onGround && !player.doubleUsed) {
         player.vy = DOUBLE_JUMP_POWER;
@@ -1466,6 +1471,7 @@
 
             if (impactVy > 7) {
               spawnParticles(player.x + player.w / 2, player.y + player.h, "#cfd8dc", 10, 2);
+              player.squash = 0.22;
             }
           } else if (player.vy < 0) {
             player.y = p.y + p.h;
@@ -1544,6 +1550,9 @@
       const pcx = player.x + player.w / 2;
       const pcy = player.y + player.h / 2;
 
+      const magnetRadius = player.autoBoost > 0 ? 170 : 110;
+      const magnetPower = player.autoBoost > 0 ? 9 : 6;
+
       for (const r of level.rings) {
         if (r.taken) continue;
 
@@ -1551,9 +1560,9 @@
         const dy = pcy - r.y;
         const dist = Math.hypot(dx, dy);
 
-        if (dist < 110 && dist > 1) {
-          r.x += (dx / dist) * 6;
-          r.y += (dy / dist) * 6;
+        if (dist < magnetRadius && dist > 1) {
+          r.x += (dx / dist) * magnetPower;
+          r.y += (dy / dist) * magnetPower;
         }
 
         if (dist < 36) {
@@ -1991,6 +2000,10 @@
       if (player.invuln > 0) player.invuln -= STEP;
       if (player.autoBoost > 0) player.autoBoost -= STEP;
 
+      if (player.squash > 0) {
+        player.squash = Math.max(0, player.squash - STEP * 2.5);
+      }
+
       if (player.loop) {
         updateLoop();
       } else if (player.rail) {
@@ -2043,6 +2056,15 @@
       }
 
       player.spinAngle += Math.abs(player.vx) * 0.06 + (player.onGround ? 0.02 : 0.28);
+
+      if (audioCtx && musicFilter) {
+        const fast = player.autoBoost > 0 || Math.abs(player.vx) > 12;
+        musicFilter.frequency.setTargetAtTime(
+          fast ? 9500 : 6500,
+          audioCtx.currentTime,
+          0.15
+        );
+      }
 
       jumpPressed = false;
     }
@@ -2880,6 +2902,25 @@
       ctx.fillRect(0, 0, VIEW_W, H);
     }
 
+    function drawBoostEdgeGlow() {
+      if (gameState !== "play" || player.autoBoost <= 0) return;
+
+      const g = ctx.createRadialGradient(
+        VIEW_W / 2,
+        H / 2,
+        H * 0.35,
+        VIEW_W / 2,
+        H / 2,
+        H * 0.88
+      );
+
+      g.addColorStop(0, "rgba(80,200,255,0)");
+      g.addColorStop(1, "rgba(80,200,255,0.16)");
+
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, VIEW_W, H);
+    }
+
     function drawComboAura() {
       if (gameState !== "play" || combo < 4) return;
 
@@ -2962,7 +3003,19 @@
         ctx.fill();
       } else {
         ctx.translate(cx, cy);
-        ctx.scale(player.facing, 1);
+
+        let sx = player.facing;
+        let sy = 1;
+
+        if (!player.onGround && player.vy < -2) {
+          sx *= 0.95;
+          sy = 1.07;
+        } else if (player.squash > 0) {
+          sx *= 1 + player.squash * 0.65;
+          sy = 1 - player.squash * 0.45;
+        }
+
+        ctx.scale(sx, sy);
 
         const grad = ctx.createLinearGradient(-15, -20, 15, 20);
         grad.addColorStop(0, "#5a8dff");
@@ -3064,15 +3117,35 @@
       ctx.fillStyle = "white";
       ctx.fillText(`SCORE ${score}`, 26, 42);
 
+      ctx.strokeStyle = "#ffb300";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(34, 62, 8, 0, Math.PI * 2);
+      ctx.stroke();
+
       ctx.fillStyle = rings === 0 ? "#ff6b6b" : "#ffd54f";
-      ctx.fillText(`RINGE ${rings}`, 26, 70);
+      ctx.fillText(`${rings}`, 52, 70);
 
       ctx.fillStyle = "white";
       ctx.fillText(`ZEIT ${time.toFixed(1)}`, 26, 98);
-      ctx.fillText(`LEBEN ${lives}`, 26, 126);
+
+      drawHeart(34, 108, 0.55);
+      ctx.fillStyle = "white";
+      ctx.fillText(`${lives}`, 52, 126);
+
+      ctx.fillStyle = player.shield ? "#4fc3f7" : "rgba(255,255,255,0.25)";
+      ctx.beginPath();
+      ctx.moveTo(34, 136);
+      ctx.lineTo(44, 140);
+      ctx.lineTo(44, 148);
+      ctx.quadraticCurveTo(44, 154, 34, 158);
+      ctx.quadraticCurveTo(24, 154, 24, 148);
+      ctx.lineTo(24, 140);
+      ctx.closePath();
+      ctx.fill();
 
       ctx.fillStyle = player.shield ? "#4fc3f7" : "rgba(255,255,255,0.45)";
-      ctx.fillText(`SCHILD ${player.shield ? "AN" : "AUS"}`, 26, 152);
+      ctx.fillText(player.shield ? "AN" : "AUS", 52, 152);
 
       if (level && level.boss && level.boss.health > 0) {
         const b = level.boss;
@@ -3132,6 +3205,13 @@
       roundRect(x + 2, y + 2, Math.max(0, (bw - 4) * p), 14, 8);
       ctx.fill();
 
+      if (boostMeter > 0.95 && player.autoBoost <= 0) {
+        ctx.strokeStyle = `rgba(140,230,255,${0.35 + 0.25 * Math.sin(animT * 8)})`;
+        ctx.lineWidth = 3;
+        roundRect(x - 2, y - 2, bw + 4, 22, 12);
+        ctx.stroke();
+      }
+
       ctx.fillStyle = "rgba(255,255,255,0.85)";
       ctx.font = "bold 12px Arial";
       ctx.textAlign = "center";
@@ -3162,15 +3242,15 @@
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fillRect(0, 0, VIEW_W, H);
 
-        drawCenterText("SPEED DASH AUTO", 140, Math.min(64, VIEW_W / 9));
-        drawCenterText("No Down / Dash • Auto Boost • Grafik+", 190, Math.min(28, VIEW_W / 24));
+        drawCenterText("SPEED DASH ULTRA+", 140, Math.min(64, VIEW_W / 9));
+        drawCenterText("Auto Boost • Grafik Push • Musik Push", 190, Math.min(28, VIEW_W / 24));
 
         ctx.font = `${Math.min(22, VIEW_W / 30)}px Arial`;
         ctx.fillStyle = "#ffffff";
 
         ctx.fillText("Links / Rechts / Jump", VIEW_W / 2, 270);
         ctx.fillText("Bei hoher Geschwindigkeit rollst du automatisch", VIEW_W / 2, 305);
-        ctx.fillText("Boost-Meter füllt sich beim Rennen und wird automatisch aktiv", VIEW_W / 2, 340);
+        ctx.fillText("Boost-Meter füllt sich und zündet automatisch", VIEW_W / 2, 340);
         ctx.fillText("M = Ton an/aus | ◐ = Button-Sichtbarkeit", VIEW_W / 2, 375);
 
         drawCenterText("TIPPE / DRÜCKE ENTER ODER SPACE", 450, Math.min(32, VIEW_W / 20), "#7CFC90");
@@ -3248,6 +3328,12 @@
       drawLightLeaks(camX);
       drawExtraBackground(camX);
 
+      const speed = Math.abs(player.vx);
+      const speedZoom =
+        gameState === "play"
+          ? 1 + Math.min(0.055, speed * 0.0025 + (player.autoBoost > 0 ? 0.018 : 0))
+          : 1;
+
       ctx.save();
 
       if (shake > 0) {
@@ -3258,6 +3344,10 @@
           (Math.random() - 0.5) * s
         );
       }
+
+      ctx.translate(VIEW_W / 2, H / 2);
+      ctx.scale(speedZoom, speedZoom);
+      ctx.translate(-VIEW_W / 2, -H / 2);
 
       if (level) {
         drawWorld(camX);
@@ -3274,6 +3364,7 @@
       ctx.restore();
 
       drawVignette();
+      drawBoostEdgeGlow();
       drawComboAura();
       drawFlash();
 
