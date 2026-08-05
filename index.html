@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Speed Dash Polish Complete</title>
+  <title>Speed Dash Auto Boost</title>
   <style>
     :root {
       --ctrl-opacity: 0.72;
@@ -104,7 +104,11 @@
     }
 
     .ctrl.smallText {
-      font-size: clamp(11px, 2vw, 14px);
+      font-size: clamp(13px, 2.4vw, 18px);
+    }
+
+    .ctrl.wide {
+      width: clamp(110px, 22vw, 160px);
     }
 
     .ctrl:active {
@@ -136,9 +140,7 @@
     </div>
 
     <div class="group">
-      <button class="ctrl" data-key="ArrowDown">▼</button>
-      <button class="ctrl smallText" data-key="ShiftLeft">DASH</button>
-      <button class="ctrl smallText" data-key="Space">JUMP</button>
+      <button class="ctrl smallText wide" data-key="Space">JUMP</button>
     </div>
   </div>
 
@@ -260,6 +262,7 @@
     let checkpoint = null;
 
     const particles = [];
+    const popups = [];
 
     let shake = 0;
     let combo = 0;
@@ -267,9 +270,10 @@
     let flash = 0;
     let hitStop = 0;
 
+    let boostMeter = 0;
+
     const keys = {};
     let jumpPressed = false;
-    let dashPressed = false;
 
     const player = {
       x: 80,
@@ -282,12 +286,7 @@
       facing: 1,
       rolling: false,
 
-      dashTime: 0,
-      dashCooldown: 0,
-
-      spinCharging: false,
-      spinCharge: 0,
-      spinDashTimer: 0,
+      autoBoost: 0,
 
       invuln: 0,
       spinAngle: 0,
@@ -652,12 +651,13 @@
       playSynth(98, 0.08, "sine", 0.14, 0, 0.05);
     }
 
-    function sfxDash() {
-      playSynth(48, 0.22, "sawtooth", 0.22, 24);
+    function sfxBoost() {
+      playSynth(55, 0.18, "sawtooth", 0.2, 28);
     }
 
-    function sfxCharge() {
-      playSynth(60 + Math.floor(player.spinCharge * 2), 0.05, "square", 0.14);
+    function sfxAutoBoost() {
+      playSynth(48, 0.22, "sawtooth", 0.22, 24);
+      playSynth(72, 0.12, "square", 0.12, 10, 0.03);
     }
 
     function sfxHurt() {
@@ -666,10 +666,6 @@
 
     function sfxSpring() {
       playSynth(65, 0.16, "square", 0.18, 20);
-    }
-
-    function sfxBoost() {
-      playSynth(55, 0.18, "sawtooth", 0.2, 28);
     }
 
     function sfxEnemy() {
@@ -1082,6 +1078,7 @@
       levelMessage = 2.2;
 
       particles.length = 0;
+      popups.length = 0;
       player.trail.length = 0;
 
       shake = 0;
@@ -1089,6 +1086,7 @@
       comboTimer = 0;
       flash = 0;
       hitStop = 0;
+      boostMeter = 0;
 
       let startX = level.playerStart.x;
       let startY = level.playerStart.y;
@@ -1106,12 +1104,7 @@
       player.facing = 1;
       player.rolling = false;
 
-      player.dashTime = 0;
-      player.dashCooldown = 0;
-
-      player.spinCharging = false;
-      player.spinCharge = 0;
-      player.spinDashTimer = 0;
+      player.autoBoost = 0;
 
       player.invuln = 2.0;
       player.spinAngle = 0;
@@ -1159,7 +1152,6 @@
       }
 
       jumpPressed = false;
-      dashPressed = false;
     }
 
     function pressControl(code) {
@@ -1167,10 +1159,6 @@
 
       if (["Space", "ArrowUp", "KeyW"].includes(code)) {
         jumpPressed = true;
-      }
-
-      if (["ShiftLeft", "ShiftRight", "KeyX"].includes(code)) {
-        dashPressed = true;
       }
 
       keys[code] = true;
@@ -1269,6 +1257,23 @@
       }
     }
 
+    function addPopup(x, y, text, color) {
+      popups.push({ x, y, text, color, life: 0.9 });
+    }
+
+    function updatePopups() {
+      for (let i = popups.length - 1; i >= 0; i--) {
+        const p = popups[i];
+
+        p.life -= STEP;
+        p.y -= 0.6;
+
+        if (p.life <= 0) {
+          popups.splice(i, 1);
+        }
+      }
+    }
+
     function roundRect(x, y, w, h, r) {
       ctx.beginPath();
       ctx.moveTo(x + r, y);
@@ -1289,6 +1294,19 @@
       if (score >= 3500) return "B";
       if (score >= 1800) return "C";
       return "D";
+    }
+
+    function triggerAutoBoost() {
+      player.autoBoost = 1.8;
+      boostMeter = 0;
+
+      sfxAutoBoost();
+
+      flash = Math.max(flash, 0.08);
+      shake = Math.max(shake, 0.08);
+
+      spawnParticles(player.x + player.w / 2, player.y + player.h, "#8fd3ff", 18, 5);
+      addPopup(player.x + player.w / 2, player.y - 24, "AUTO BOOST", "#8fd3ff");
     }
 
     function hurtPlayer() {
@@ -1343,105 +1361,66 @@
     function updateNormal() {
       const left = keys.ArrowLeft || keys.KeyA;
       const right = keys.ArrowRight || keys.KeyD;
-      const down = keys.ArrowDown || keys.KeyS;
 
-      if (player.onGround && down && Math.abs(player.vx) > 3.5) {
+      if (player.onGround && Math.abs(player.vx) > 8.5) {
         player.rolling = true;
       }
 
-      if (player.rolling && (!down || Math.abs(player.vx) < 1.5 || !player.onGround)) {
+      if (player.rolling && (!player.onGround || Math.abs(player.vx) < 6)) {
         player.rolling = false;
       }
 
-      if (player.onGround && down && !player.rolling) {
-        player.spinCharging = true;
+      const boostActive = player.autoBoost > 0;
 
-        if (left) player.facing = -1;
-        if (right) player.facing = 1;
+      const maxSpeed =
+        boostActive ? 18 :
+        player.rolling ? 13 : MAX_BASE;
 
-        if (jumpPressed) {
-          player.spinCharge = Math.min(14, player.spinCharge + 3.5);
-          sfxCharge();
+      if (left && !right) {
+        player.vx -= player.onGround ? (boostActive ? 0.95 : ACCEL) : AIR_ACCEL;
+        player.facing = -1;
+      }
+
+      if (right && !left) {
+        player.vx += player.onGround ? (boostActive ? 0.95 : ACCEL) : AIR_ACCEL;
+        player.facing = 1;
+      }
+
+      if ((!left && !right) || (left && right)) {
+        const friction =
+          player.onGround ?
+            (boostActive || player.rolling ? 0.995 : 0.93) :
+            0.985;
+
+        player.vx *= friction;
+
+        if (Math.abs(player.vx) < 0.12) {
+          player.vx = 0;
         }
+      }
 
-        player.vx *= 0.82;
-        if (Math.abs(player.vx) < 0.2) player.vx = 0;
-      } else {
-        if (player.spinCharging && player.spinCharge > 0) {
-          player.vx = player.facing * (9 + player.spinCharge);
-          player.spinDashTimer = 0.35;
-          player.rolling = false;
-          sfxDash();
-          spawnParticles(player.x + player.w / 2, player.y + player.h, "#8fd3ff", 14, 4);
-        }
+      if (Math.abs(player.vx) > maxSpeed) {
+        player.vx = Math.sign(player.vx) * maxSpeed;
+      }
 
-        player.spinCharging = false;
-        player.spinCharge = 0;
+      if (jumpPressed && player.onGround) {
+        player.vy = JUMP_POWER;
+        player.onGround = false;
+        player.jumping = true;
+        player.rolling = false;
+        player.doubleUsed = false;
+        sfxJump();
+      } else if (DOUBLE_JUMP && jumpPressed && !player.onGround && !player.doubleUsed) {
+        player.vy = DOUBLE_JUMP_POWER;
+        player.doubleUsed = true;
+        player.jumping = true;
+        player.rolling = false;
+        sfxDoubleJump();
+        spawnParticles(player.x + player.w / 2, player.y + player.h, "#b3e5fc", 12, 3);
+      }
 
-        const maxSpeed =
-          player.spinDashTimer > 0 ? 24 :
-          player.dashTime > 0 ? 17 :
-          player.rolling ? 13 : MAX_BASE;
-
-        if (player.dashTime > 0) {
-          player.vx = player.facing * 17;
-        } else {
-          if (left && !right) {
-            player.vx -= player.onGround ? ACCEL : AIR_ACCEL;
-            player.facing = -1;
-          }
-
-          if (right && !left) {
-            player.vx += player.onGround ? ACCEL : AIR_ACCEL;
-            player.facing = 1;
-          }
-
-          if ((!left && !right) || (left && right)) {
-            const friction =
-              player.onGround ?
-                (player.spinDashTimer > 0 ? 0.995 : player.rolling ? 0.99 : 0.93) :
-                0.985;
-
-            player.vx *= friction;
-
-            if (Math.abs(player.vx) < 0.12) {
-              player.vx = 0;
-            }
-          }
-
-          if (Math.abs(player.vx) > maxSpeed) {
-            player.vx = Math.sign(player.vx) * maxSpeed;
-          }
-        }
-
-        if (jumpPressed && player.onGround) {
-          player.vy = JUMP_POWER;
-          player.onGround = false;
-          player.jumping = true;
-          player.rolling = false;
-          player.doubleUsed = false;
-          sfxJump();
-        } else if (DOUBLE_JUMP && jumpPressed && !player.onGround && !player.doubleUsed && !down) {
-          player.vy = DOUBLE_JUMP_POWER;
-          player.doubleUsed = true;
-          player.jumping = true;
-          player.rolling = false;
-          sfxDoubleJump();
-          spawnParticles(player.x + player.w / 2, player.y + player.h, "#b3e5fc", 12, 3);
-        }
-
-        if (player.jumping && !keys.Space && player.vy < -9) {
-          player.vy = -9;
-        }
-
-        if (dashPressed && player.onGround && player.dashCooldown <= 0) {
-          player.dashTime = 0.26;
-          player.dashCooldown = 0.6;
-          player.vx = player.facing * 17;
-          player.rolling = false;
-          sfxDash();
-          spawnParticles(player.x + player.w / 2, player.y + player.h, "#8fd3ff", 14, 4);
-        }
+      if (player.jumping && !keys.Space && player.vy < -9) {
+        player.vy = -9;
       }
 
       player.vy += GRAVITY;
@@ -1468,7 +1447,6 @@
           }
 
           player.vx = 0;
-          player.dashTime = 0;
         }
       }
 
@@ -1513,8 +1491,6 @@
       player.vy = 0;
       player.onGround = false;
       player.rolling = false;
-      player.spinCharging = false;
-      player.spinCharge = 0;
       player.facing = l.dir;
 
       player.spinAngle += 0.5;
@@ -1551,8 +1527,6 @@
       player.vy = 0;
       player.onGround = false;
       player.rolling = false;
-      player.spinCharging = false;
-      player.spinCharge = 0;
       player.facing = r.dir;
 
       player.spinAngle += 0.3;
@@ -1586,6 +1560,9 @@
           r.taken = true;
           rings++;
           score += 10;
+
+          boostMeter = Math.min(1, boostMeter + 0.02);
+
           sfxRing();
           spawnParticles(r.x, r.y, "#ffd54f", 8, 3);
         }
@@ -1602,6 +1579,7 @@
           lives = Math.min(99, lives + 1);
           sfxHeart();
           spawnParticles(h.x, h.y, "#ff4081", 16, 4);
+          addPopup(h.x, h.y - 22, "+1 LEBEN", "#ff4081");
         }
       }
     }
@@ -1616,6 +1594,7 @@
           player.shield = true;
           sfxShield();
           spawnParticles(s.x, s.y, "#4fc3f7", 18, 4);
+          addPopup(s.x, s.y - 22, "SCHILD", "#4fc3f7");
         }
       }
     }
@@ -1633,6 +1612,7 @@
 
           sfxCheckpoint();
           spawnParticles(c.x + c.w / 2, c.y + 20, "#69f0ae", 18, 4);
+          addPopup(c.x + c.w / 2, c.y - 12, "CHECKPOINT", "#69f0ae");
         }
       }
     }
@@ -1644,7 +1624,9 @@
         if (intersects(player, b)) {
           player.vx = b.dir * b.power;
           player.facing = b.dir;
-          player.spinDashTimer = Math.max(player.spinDashTimer, 0.15);
+
+          boostMeter = Math.min(1, boostMeter + 0.18);
+
           sfxBoost();
           spawnParticles(player.x + player.w / 2, player.y + player.h, "#ff7043", 12, 4);
         }
@@ -1679,8 +1661,6 @@
           player.vy = 0;
           player.onGround = false;
           player.rolling = false;
-          player.spinCharging = false;
-          player.spinCharge = 0;
           player.facing = r.dir;
           sfxBoost();
           spawnParticles(player.x + player.w / 2, player.y + player.h, "#90a4ae", 12, 3);
@@ -1713,7 +1693,7 @@
             progress: 0
           };
 
-          sfxDash();
+          sfxBoost();
           spawnParticles(pcx, pcy + 15, "#ffd54f", 14, 4);
           break;
         }
@@ -1734,8 +1714,7 @@
 
         if (!player.loop && !player.rail && intersects(player, e)) {
           const attack =
-            player.spinDashTimer > 0 ||
-            player.dashTime > 0 ||
+            player.autoBoost > 0 ||
             player.rolling ||
             player.vy > 2;
 
@@ -1745,11 +1724,16 @@
             combo++;
             comboTimer = 2;
 
-            score += 100 + combo * 10;
+            const addScore = 100 + combo * 10;
+            score += addScore;
+
+            boostMeter = Math.min(1, boostMeter + 0.10);
+
             shake = Math.max(shake, 0.12);
 
             sfxEnemy();
             spawnParticles(e.x + e.w / 2, e.y + e.h / 2, "#ff8a65", 18, 5);
+            addPopup(e.x + e.w / 2, e.y - 10, `+${addScore}`, "#ffab91");
 
             if (player.vy > 2) {
               player.vy = -10;
@@ -1769,7 +1753,10 @@
       combo++;
       comboTimer = 2;
 
-      score += 200 + combo * 20;
+      const addScore = 200 + combo * 20;
+      score += addScore;
+
+      boostMeter = Math.min(1, boostMeter + 0.20);
 
       shake = Math.max(shake, 0.35);
       flash = Math.max(flash, 0.20);
@@ -1777,6 +1764,7 @@
 
       sfxBossHit();
       spawnParticles(b.x + b.w / 2, b.y + b.h / 2, "#ffeb3b", 28, 7);
+      addPopup(b.x + b.w / 2, b.y - 14, `+${addScore}`, "#fff59d");
 
       if (player.vy > 2) {
         player.vy = -11;
@@ -1862,8 +1850,7 @@
       if (!level.bullets) return;
 
       const attack =
-        player.spinDashTimer > 0 ||
-        player.dashTime > 0 ||
+        player.autoBoost > 0 ||
         player.rolling ||
         player.vy > 2;
 
@@ -1945,8 +1932,7 @@
     function updateTrail() {
       const fast =
         Math.abs(player.vx) > 10 ||
-        player.spinDashTimer > 0 ||
-        player.dashTime > 0 ||
+        player.autoBoost > 0 ||
         player.loop ||
         player.rail;
 
@@ -1974,7 +1960,6 @@
     function fixedUpdate() {
       if (gameState !== "play") {
         jumpPressed = false;
-        dashPressed = false;
         return;
       }
 
@@ -1985,9 +1970,9 @@
         if (flash > 0) flash = Math.max(0, flash - STEP);
 
         updateParticles();
+        updatePopups();
 
         jumpPressed = false;
-        dashPressed = false;
         return;
       }
 
@@ -2004,9 +1989,7 @@
       }
 
       if (player.invuln > 0) player.invuln -= STEP;
-      if (player.dashTime > 0) player.dashTime -= STEP;
-      if (player.dashCooldown > 0) player.dashCooldown -= STEP;
-      if (player.spinDashTimer > 0) player.spinDashTimer -= STEP;
+      if (player.autoBoost > 0) player.autoBoost -= STEP;
 
       if (player.loop) {
         updateLoop();
@@ -2018,6 +2001,14 @@
         checkSprings();
         checkRails();
         checkLoops();
+      }
+
+      if (player.onGround && Math.abs(player.vx) > 8 && player.autoBoost <= 0) {
+        boostMeter = Math.min(1, boostMeter + STEP * 0.16);
+      }
+
+      if (boostMeter >= 1 && player.autoBoost <= 0) {
+        triggerAutoBoost();
       }
 
       if (player.onGround && Math.abs(player.vx) > 8 && Math.random() < 0.12) {
@@ -2045,6 +2036,7 @@
       checkGoal();
       updateParticles();
       updateTrail();
+      updatePopups();
 
       if (player.y > H + 320) {
         killPlayer();
@@ -2053,7 +2045,6 @@
       player.spinAngle += Math.abs(player.vx) * 0.06 + (player.onGround ? 0.02 : 0.28);
 
       jumpPressed = false;
-      dashPressed = false;
     }
 
     /* ---------------- DRAW ---------------- */
@@ -2825,10 +2816,34 @@
       ctx.globalAlpha = 1;
     }
 
+    function drawPopups(camX) {
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.font = "bold 18px Arial";
+
+      for (const p of popups) {
+        const x = p.x - camX;
+        const alpha = Math.min(1, p.life * 1.6);
+
+        if (x < -80 || x > VIEW_W + 80) continue;
+
+        ctx.globalAlpha = alpha;
+
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.fillText(p.text, x + 1, p.y + 1);
+
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, x, p.y);
+      }
+
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
     function drawSpeedLines(camX) {
       const speed = Math.abs(player.vx);
 
-      if (speed < 11 && !player.rail && !player.loop) return;
+      if (speed < 11 && !player.rail && !player.loop && player.autoBoost <= 0) return;
 
       ctx.strokeStyle = "rgba(255,255,255,0.14)";
       ctx.lineWidth = 2;
@@ -2897,22 +2912,6 @@
       const px = player.x - camX;
       const py = player.y;
 
-      if (player.spinCharging && player.spinCharge > 0) {
-        const bx = px - 22;
-        const by = py - 24;
-        const bw = 70;
-        const bh = 10;
-        const p = player.spinCharge / 14;
-
-        ctx.fillStyle = "rgba(0,0,0,0.45)";
-        roundRect(bx, by, bw, bh, 6);
-        ctx.fill();
-
-        ctx.fillStyle = p > 0.75 ? "#ff5252" : p > 0.4 ? "#ffd54f" : "#69f0ae";
-        roundRect(bx + 1, by + 1, (bw - 2) * p, bh - 2, 5);
-        ctx.fill();
-      }
-
       ctx.save();
 
       if (player.invuln > 0 && Math.floor(player.invuln * 12) % 2 === 0) {
@@ -2923,8 +2922,7 @@
       const cy = py + player.h / 2;
 
       const spinMode =
-        player.dashTime > 0 ||
-        player.spinDashTimer > 0 ||
+        player.autoBoost > 0 ||
         player.rolling ||
         !player.onGround ||
         player.loop ||
@@ -3030,6 +3028,22 @@
         ctx.arc(cx2, cy2, 26 + pulse, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      if (player.autoBoost > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+
+        const g = ctx.createRadialGradient(cx, cy, 5, cx, cy, 44);
+        g.addColorStop(0, "rgba(120,220,255,0.22)");
+        g.addColorStop(1, "rgba(120,220,255,0)");
+
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 44, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
     }
 
     function drawHUD() {
@@ -3090,6 +3104,44 @@
       }
     }
 
+    function drawBoostMeter() {
+      if (gameState === "title") return;
+
+      const bw = Math.min(280, VIEW_W * 0.38);
+      const x = 12;
+      const y = 170;
+
+      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      roundRect(x, y, bw, 18, 10);
+      ctx.fill();
+
+      const p = player.autoBoost > 0 ? 1 : boostMeter;
+
+      const g = ctx.createLinearGradient(x, 0, x + bw, 0);
+
+      if (player.autoBoost > 0) {
+        g.addColorStop(0, "#e1f5fe");
+        g.addColorStop(0.5, "#4fc3f7");
+        g.addColorStop(1, "#0288d1");
+      } else {
+        g.addColorStop(0, "#80deea");
+        g.addColorStop(1, "#00acc1");
+      }
+
+      ctx.fillStyle = g;
+      roundRect(x + 2, y + 2, Math.max(0, (bw - 4) * p), 14, 8);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.font = "bold 12px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(
+        player.autoBoost > 0 ? "AUTO BOOST" : "BOOST METER",
+        x + bw / 2,
+        y + 14
+      );
+    }
+
     function drawCenterText(text, y, size = 48, color = "#ffffff") {
       ctx.fillStyle = color;
       ctx.font = `bold ${size}px Arial`;
@@ -3110,15 +3162,15 @@
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fillRect(0, 0, VIEW_W, H);
 
-        drawCenterText("SPEED DASH POLISHED", 140, Math.min(64, VIEW_W / 9));
-        drawCenterText("Mobile Lift • Small Buttons • FX+ • BGM+", 190, Math.min(28, VIEW_W / 24));
+        drawCenterText("SPEED DASH AUTO", 140, Math.min(64, VIEW_W / 9));
+        drawCenterText("No Down / Dash • Auto Boost • Grafik+", 190, Math.min(28, VIEW_W / 24));
 
         ctx.font = `${Math.min(22, VIEW_W / 30)}px Arial`;
         ctx.fillStyle = "#ffffff";
 
-        ctx.fillText("Touch-Buttons oder Tastatur", VIEW_W / 2, 270);
-        ctx.fillText("Unten + Space tippen = Spin-Dash | Unten loslassen = Start", VIEW_W / 2, 305);
-        ctx.fillText("Schild, Double Jump, Ring-Magnet, Checkpoints, Combo, Hit-Stop", VIEW_W / 2, 340);
+        ctx.fillText("Links / Rechts / Jump", VIEW_W / 2, 270);
+        ctx.fillText("Bei hoher Geschwindigkeit rollst du automatisch", VIEW_W / 2, 305);
+        ctx.fillText("Boost-Meter füllt sich beim Rennen und wird automatisch aktiv", VIEW_W / 2, 340);
         ctx.fillText("M = Ton an/aus | ◐ = Button-Sichtbarkeit", VIEW_W / 2, 375);
 
         drawCenterText("TIPPE / DRÜCKE ENTER ODER SPACE", 450, Math.min(32, VIEW_W / 20), "#7CFC90");
@@ -3215,6 +3267,7 @@
         drawSpeedLines(camX);
         drawPlayer(camX);
         drawParticles(camX);
+        drawPopups(camX);
         drawForeground(camX);
       }
 
@@ -3226,6 +3279,7 @@
 
       if (gameState !== "title") {
         drawHUD();
+        drawBoostMeter();
       }
 
       if (combo > 1 && gameState === "play") {
