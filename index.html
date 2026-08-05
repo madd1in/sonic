@@ -2,46 +2,133 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <title>Speed Dash 2 - Sonic-like Prototype</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Speed Dash Mobile - Easy Polish</title>
   <style>
     html, body {
       margin: 0;
+      width: 100%;
       height: 100%;
-      background: #050816;
+      background: #040613;
       overflow: hidden;
+      touch-action: none;
+      font-family: Arial, sans-serif;
     }
 
     body {
-      display: grid;
-      place-items: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     canvas {
-      border: 4px solid #000;
+      display: block;
       border-radius: 12px;
       box-shadow: 0 12px 50px rgba(0, 0, 0, 0.55);
+      image-rendering: pixelated;
+    }
+
+    #controls {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 16px;
+      display: none;
+      justify-content: space-between;
+      padding: 0 18px;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    .group {
+      display: flex;
+      gap: 14px;
+      pointer-events: auto;
+    }
+
+    .ctrl {
+      width: 74px;
+      height: 74px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.35);
+      background: rgba(0, 0, 0, 0.35);
+      color: white;
+      font-size: 28px;
+      font-weight: bold;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .ctrl.smallText {
+      font-size: 16px;
+    }
+
+    .ctrl:active {
+      background: rgba(255, 255, 255, 0.25);
+      transform: scale(0.96);
+    }
+
+    #controls.show {
+      display: flex;
+    }
+
+    @media (pointer: coarse) {
+      #controls {
+        display: flex;
+      }
     }
   </style>
 </head>
 <body>
   <canvas id="game" width="960" height="540"></canvas>
 
+  <div id="controls">
+    <div class="group">
+      <button class="ctrl" data-key="ArrowLeft">◀</button>
+      <button class="ctrl" data-key="ArrowRight">▶</button>
+    </div>
+
+    <div class="group">
+      <button class="ctrl" data-key="ArrowDown">▼</button>
+      <button class="ctrl smallText" data-key="ShiftLeft">DASH</button>
+      <button class="ctrl smallText" data-key="Space">JUMP</button>
+    </div>
+  </div>
+
   <script>
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
 
-    const W = canvas.width;
-    const H = canvas.height;
+    const W = 960;
+    const H = 540;
     const STEP = 1 / 60;
     const LEVEL_COUNT = 3;
 
-    let gameState = "title"; // title, levelIntro, play, dead, levelClear, gameover, win
+    const EASY = true;
+
+    const START_LIVES = EASY ? 6 : 3;
+    const BOSS_HEALTH = EASY ? 5 : 8;
+    const ENEMY_SPEED = EASY ? 1.0 : 1.5;
+    const GRAVITY = EASY ? 0.66 : 0.72;
+    const JUMP_POWER = EASY ? -15.3 : -14.2;
+    const ACCEL = EASY ? 0.62 : 0.55;
+    const AIR_ACCEL = EASY ? 0.36 : 0.32;
+    const MAX_BASE = EASY ? 9.6 : 8.8;
+    const INVULN_TIME = EASY ? 2.8 : 2.0;
+    const BOSS_BULLET_SPEED = EASY ? 4.3 : 5.5;
+
+    let gameState = "title";
     let currentLevel = 0;
     let score = 0;
     let rings = 0;
-    let lives = 3;
+    let lives = START_LIVES;
     let time = 0;
     let levelMessage = 0;
+    let animT = 0;
+    let checkpoint = null;
+
+    const particles = [];
 
     const keys = {};
     let jumpPressed = false;
@@ -70,7 +157,9 @@
       jumping: false,
 
       loop: null,
-      rail: null
+      rail: null,
+
+      trail: []
     };
 
     let level = null;
@@ -87,7 +176,28 @@
       { dirt: "#37474f", grass: "#b0bec5" }
     ];
 
-    /* ------------------------- AUDIO ------------------------- */
+    /* ---------------- CANVAS FIT / ZOOM ---------------- */
+
+    function fitCanvas() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      canvas.width = W * dpr;
+      canvas.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const scale = Math.min(window.innerWidth / W, window.innerHeight / H);
+      canvas.style.width = `${W * scale}px`;
+      canvas.style.height = `${H * scale}px`;
+    }
+
+    window.addEventListener("resize", fitCanvas);
+    fitCanvas();
+
+    if (("ontouchstart" in window) || navigator.maxTouchPoints > 0) {
+      document.getElementById("controls").classList.add("show");
+    }
+
+    /* ---------------- AUDIO / BGM ---------------- */
 
     let audioCtx = null;
     let masterGain = null;
@@ -96,6 +206,7 @@
     let musicTimer = null;
     let musicStep = 0;
     let muted = false;
+    let noiseBuffer = null;
 
     const musicPatterns = [
       {
@@ -148,6 +259,21 @@
       return 440 * Math.pow(2, (m - 69) / 12);
     }
 
+    function getNoiseBuffer() {
+      if (!audioCtx) return null;
+      if (noiseBuffer) return noiseBuffer;
+
+      const len = audioCtx.sampleRate * 0.2;
+      noiseBuffer = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+      const data = noiseBuffer.getChannelData(0);
+
+      for (let i = 0; i < len; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+
+      return noiseBuffer;
+    }
+
     function playSynth(midi, dur = 0.1, type = "square", gain = 0.2, slide = 0, when = 0, dest = null) {
       if (!audioCtx || muted) return;
 
@@ -179,6 +305,54 @@
       playSynth(midi, dur, type, gain, 0, 0, musicGain);
     }
 
+    function playNoise(dur = 0.05, gain = 0.1, filterType = "highpass", when = 0, dest = null) {
+      if (!audioCtx || muted) return;
+
+      const buffer = getNoiseBuffer();
+      if (!buffer) return;
+
+      const src = audioCtx.createBufferSource();
+      src.buffer = buffer;
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = filterType;
+      filter.frequency.value = filterType === "bandpass" ? 1800 : 6000;
+
+      const g = audioCtx.createGain();
+      const t = audioCtx.currentTime + when;
+
+      g.gain.setValueAtTime(gain, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+      src.connect(filter);
+      filter.connect(g);
+      g.connect(dest || musicGain);
+
+      src.start(t);
+      src.stop(t + dur + 0.02);
+    }
+
+    function playKick(when = 0, dest = null) {
+      if (!audioCtx || muted) return;
+
+      const t = audioCtx.currentTime + when;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+
+      o.type = "sine";
+      o.frequency.setValueAtTime(120, t);
+      o.frequency.exponentialRampToValueAtTime(35, t + 0.12);
+
+      g.gain.setValueAtTime(0.45, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+
+      o.connect(g);
+      g.connect(dest || musicGain);
+
+      o.start(t);
+      o.stop(t + 0.16);
+    }
+
     function startMusic(levelIndex) {
       if (!audioCtx) return;
 
@@ -208,6 +382,18 @@
           "square",
           0.07
         );
+
+        if (idx % 4 === 0) {
+          playKick(0, musicGain);
+        }
+
+        if (idx % 2 === 0) {
+          playNoise(0.03, 0.02, "highpass", 0, musicGain);
+        }
+
+        if (idx === 4 || idx === 12) {
+          playNoise(0.08, 0.05, "bandpass", 0, musicGain);
+        }
 
         musicStep++;
       }, ms);
@@ -262,6 +448,18 @@
       playSynth(76, 0.08, "square", 0.1, -10);
     }
 
+    function sfxCheckpoint() {
+      [72, 79, 84].forEach((n, i) => {
+        playSynth(n, 0.12, "square", 0.14, 0, i * 0.06);
+      });
+    }
+
+    function sfxHeart() {
+      [76, 83, 88].forEach((n, i) => {
+        playSynth(n, 0.12, "sine", 0.16, 0, i * 0.06);
+      });
+    }
+
     function sfxLevelClear() {
       [72, 76, 79, 84].forEach((n, i) => {
         playSynth(n, 0.16, "square", 0.16, 0, i * 0.09);
@@ -274,7 +472,7 @@
       });
     }
 
-    /* ------------------------- LEVELS ------------------------- */
+    /* ---------------- LEVELS ---------------- */
 
     function buildLevel1() {
       const platforms = [
@@ -314,6 +512,16 @@
         { x: 4300, y: 446, w: 34, h: 34, dir: 1, minX: 3800, maxX: 4450, dead: false }
       ];
 
+      const checkpoints = [
+        { x: 2200, y: 380, w: 26, h: 100, active: false },
+        { x: 4200, y: 380, w: 26, h: 100, active: false }
+      ];
+
+      const hearts = [
+        { x: 1700, y: 300, taken: false },
+        { x: 4300, y: 310, taken: false }
+      ];
+
       const rings = [];
       const add = (x, y, n = 1, dx = 38) => {
         for (let i = 0; i < n; i++) {
@@ -321,18 +529,18 @@
         }
       };
 
-      add(250, 430, 6);
+      add(250, 430, 7);
       add(720, 320, 4);
-      add(1000, 430, 5);
-      add(1250, 360, 4);
+      add(1000, 430, 6);
+      add(1250, 360, 5);
       add(1700, 300, 4);
-      add(2100, 430, 5);
-      add(2600, 430, 5);
+      add(2100, 430, 6);
+      add(2600, 430, 6);
       add(2800, 300, 4);
-      add(3200, 430, 5);
-      add(3800, 430, 5);
+      add(3200, 430, 6);
+      add(3800, 430, 6);
       add(4200, 300, 4);
-      add(4700, 430, 5);
+      add(4700, 430, 6);
 
       return {
         name: "GREEN DASH",
@@ -346,6 +554,8 @@
         loops,
         rings,
         enemies,
+        checkpoints,
+        hearts,
         goal: { x: 5050, y: 360, w: 40, h: 120 },
         boss: null,
         bullets: []
@@ -394,6 +604,17 @@
         { x: 5500, y: 446, w: 34, h: 34, dir: 1, minX: 5350, maxX: 5650, dead: false }
       ];
 
+      const checkpoints = [
+        { x: 2050, y: 380, w: 26, h: 100, active: false },
+        { x: 3750, y: 380, w: 26, h: 100, active: false },
+        { x: 5350, y: 380, w: 26, h: 100, active: false }
+      ];
+
+      const hearts = [
+        { x: 2350, y: 310, taken: false },
+        { x: 5600, y: 310, taken: false }
+      ];
+
       const rings = [];
       const add = (x, y, n = 1, dx = 38) => {
         for (let i = 0; i < n; i++) {
@@ -401,17 +622,17 @@
         }
       };
 
-      add(250, 430, 6);
+      add(250, 430, 7);
       add(380, 320, 3);
-      add(950, 430, 5);
+      add(950, 430, 6);
       add(1300, 330, 6, 120);
-      add(2100, 430, 5);
+      add(2100, 430, 6);
       add(2350, 320, 3);
       add(2900, 300, 6, 140);
-      add(3800, 430, 5);
+      add(3800, 430, 6);
       add(4050, 320, 3);
       add(4600, 330, 6, 120);
-      add(5400, 430, 6);
+      add(5400, 430, 7);
       add(5650, 310, 3);
 
       return {
@@ -426,6 +647,8 @@
         loops: [],
         rings,
         enemies,
+        checkpoints,
+        hearts,
         goal: { x: 6000, y: 360, w: 40, h: 120 },
         boss: null,
         bullets: []
@@ -439,16 +662,16 @@
         w: 90,
         h: 90,
         baseY: 300,
-        health: 8,
-        maxHealth: 8,
+        health: BOSS_HEALTH,
+        maxHealth: BOSS_HEALTH,
         state: "hover",
-        timer: 2.5,
+        timer: EASY ? 2.0 : 2.5,
         invuln: 0,
         dir: -1,
         phase: 0,
         vulnerable: false,
         hitFlash: 0,
-        shootTimer: 1.2
+        shootTimer: EASY ? 1.8 : 1.2
       };
     }
 
@@ -466,11 +689,15 @@
         }
       };
 
-      add(250, 430, 5);
-      add(700, 430, 5);
-      add(1150, 430, 5);
+      add(250, 430, 6);
+      add(700, 430, 6);
+      add(1150, 430, 6);
       add(260, 320, 3);
       add(1200, 320, 3);
+
+      const hearts = [
+        { x: 800, y: 430, taken: false }
+      ];
 
       return {
         name: "BOSS CORE",
@@ -484,6 +711,8 @@
         loops: [],
         rings,
         enemies: [],
+        checkpoints: [],
+        hearts,
         goal: null,
         boss: createBoss(),
         bullets: []
@@ -503,8 +732,19 @@
       rings = 0;
       levelMessage = 2.2;
 
-      player.x = level.playerStart.x;
-      player.y = level.playerStart.y;
+      particles.length = 0;
+      player.trail.length = 0;
+
+      let startX = level.playerStart.x;
+      let startY = level.playerStart.y;
+
+      if (checkpoint && checkpoint.level === index) {
+        startX = checkpoint.x;
+        startY = checkpoint.y;
+      }
+
+      player.x = startX;
+      player.y = startY;
       player.vx = 0;
       player.vy = 0;
       player.onGround = false;
@@ -526,7 +766,69 @@
       player.rail = null;
     }
 
-    /* ------------------------- INPUT ------------------------- */
+    /* ---------------- INPUT ---------------- */
+
+    function handleMenuButton() {
+      initAudio();
+
+      if (gameState === "title") {
+        checkpoint = null;
+        score = 0;
+        lives = START_LIVES;
+        loadLevel(0);
+        gameState = "levelIntro";
+      } else if (gameState === "levelIntro") {
+        gameState = "play";
+        startMusic(currentLevel);
+      } else if (gameState === "dead") {
+        loadLevel(currentLevel);
+        gameState = "levelIntro";
+      } else if (gameState === "levelClear") {
+        checkpoint = null;
+        const next = currentLevel + 1;
+
+        if (next >= LEVEL_COUNT) {
+          gameState = "win";
+          sfxWin();
+        } else {
+          loadLevel(next);
+          gameState = "levelIntro";
+        }
+      } else if (gameState === "gameover" || gameState === "win") {
+        checkpoint = null;
+        gameState = "title";
+        stopMusic();
+      }
+
+      jumpPressed = false;
+      dashPressed = false;
+    }
+
+    function pressControl(code) {
+      initAudio();
+
+      if (["Space", "ArrowUp", "KeyW"].includes(code)) {
+        jumpPressed = true;
+      }
+
+      if (["ShiftLeft", "ShiftRight", "KeyX"].includes(code)) {
+        dashPressed = true;
+      }
+
+      keys[code] = true;
+
+      if (gameState !== "play" && ["Space", "Enter"].includes(code)) {
+        handleMenuButton();
+      }
+    }
+
+    function releaseControl(code) {
+      keys[code] = false;
+
+      if (gameState === "play" && code === "Space" && player.vy < -6) {
+        player.vy = -6;
+      }
+    }
 
     window.addEventListener("keydown", (e) => {
       if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
@@ -538,13 +840,7 @@
       }
 
       if (!keys[e.code]) {
-        if (["Space", "ArrowUp", "KeyW"].includes(e.code)) {
-          jumpPressed = true;
-        }
-
-        if (["ShiftLeft", "ShiftRight", "KeyX"].includes(e.code)) {
-          dashPressed = true;
-        }
+        pressControl(e.code);
 
         if (["Enter", "Space"].includes(e.code) && gameState !== "play") {
           handleMenuButton();
@@ -555,47 +851,42 @@
     });
 
     window.addEventListener("keyup", (e) => {
-      keys[e.code] = false;
+      releaseControl(e.code);
+    });
 
-      if (gameState === "play" && e.code === "Space" && player.vy < -6) {
-        player.vy = -6;
+    canvas.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      initAudio();
+
+      if (gameState !== "play") {
+        handleMenuButton();
       }
     });
 
-    function handleMenuButton() {
-      initAudio();
+    document.querySelectorAll(".ctrl").forEach((btn) => {
+      const code = btn.dataset.key;
 
-      if (gameState === "title") {
-        score = 0;
-        lives = 3;
-        loadLevel(0);
-        gameState = "levelIntro";
-      } else if (gameState === "levelIntro") {
-        gameState = "play";
-        startMusic(currentLevel);
-      } else if (gameState === "dead") {
-        loadLevel(currentLevel);
-        gameState = "levelIntro";
-      } else if (gameState === "levelClear") {
-        const next = currentLevel + 1;
+      btn.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        pressControl(code);
+        btn.classList.add("active");
+      });
 
-        if (next >= LEVEL_COUNT) {
-          gameState = "win";
-          sfxWin();
-        } else {
-          loadLevel(next);
-          gameState = "levelIntro";
-        }
-      } else if (gameState === "gameover" || gameState === "win") {
-        gameState = "title";
-        stopMusic();
-      }
+      const release = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        releaseControl(code);
+        btn.classList.remove("active");
+      };
 
-      jumpPressed = false;
-      dashPressed = false;
-    }
+      btn.addEventListener("pointerup", release);
+      btn.addEventListener("pointercancel", release);
+      btn.addEventListener("pointerleave", release);
+      btn.addEventListener("contextmenu", (e) => e.preventDefault());
+    });
 
-    /* ------------------------- HELPERS ------------------------- */
+    /* ---------------- HELPERS ---------------- */
 
     function intersects(a, b) {
       return (
@@ -606,15 +897,30 @@
       );
     }
 
+    function spawnParticles(x, y, color, n = 8, speed = 3) {
+      for (let i = 0; i < n; i++) {
+        particles.push({
+          x,
+          y,
+          vx: (Math.random() - 0.5) * speed * 2,
+          vy: (Math.random() - 0.7) * speed * 2,
+          life: 0.35 + Math.random() * 0.35,
+          color,
+          size: 2 + Math.random() * 3
+        });
+      }
+    }
+
     function hurtPlayer() {
       if (player.invuln > 0) return;
 
       if (rings > 0) {
         rings = 0;
-        player.invuln = 2;
+        player.invuln = INVULN_TIME;
         player.vy = -9;
         player.vx = -player.facing * 7;
         sfxHurt();
+        spawnParticles(player.x + player.w / 2, player.y + player.h / 2, "#ffd54f", 16, 5);
       } else {
         killPlayer();
       }
@@ -626,6 +932,7 @@
       lives--;
       stopMusic();
       sfxHurt();
+      spawnParticles(player.x + player.w / 2, player.y + player.h / 2, "#ff5252", 22, 6);
 
       if (lives <= 0) {
         gameState = "gameover";
@@ -634,14 +941,13 @@
       }
     }
 
-    /* ------------------------- UPDATE ------------------------- */
+    /* ---------------- UPDATE ---------------- */
 
     function updateNormal() {
       const left = keys.ArrowLeft || keys.KeyA;
       const right = keys.ArrowRight || keys.KeyD;
       const down = keys.ArrowDown || keys.KeyS;
 
-      // Rollen
       if (player.onGround && down && Math.abs(player.vx) > 3.5) {
         player.rolling = true;
       }
@@ -650,7 +956,6 @@
         player.rolling = false;
       }
 
-      // Spin-Dash: Unten halten + Space tippen, dann Unten loslassen
       if (player.onGround && down && !player.rolling) {
         player.spinCharging = true;
 
@@ -670,6 +975,7 @@
           player.spinDashTimer = 0.35;
           player.rolling = false;
           sfxDash();
+          spawnParticles(player.x + player.w / 2, player.y + player.h, "#8fd3ff", 12, 4);
         }
 
         player.spinCharging = false;
@@ -678,18 +984,18 @@
         const maxSpeed =
           player.spinDashTimer > 0 ? 24 :
           player.dashTime > 0 ? 17 :
-          player.rolling ? 12 : 8.8;
+          player.rolling ? 12 : MAX_BASE;
 
         if (player.dashTime > 0) {
           player.vx = player.facing * 17;
         } else {
           if (left && !right) {
-            player.vx -= player.onGround ? 0.55 : 0.32;
+            player.vx -= player.onGround ? ACCEL : AIR_ACCEL;
             player.facing = -1;
           }
 
           if (right && !left) {
-            player.vx += player.onGround ? 0.55 : 0.32;
+            player.vx += player.onGround ? ACCEL : AIR_ACCEL;
             player.facing = 1;
           }
 
@@ -712,7 +1018,7 @@
         }
 
         if (jumpPressed && player.onGround) {
-          player.vy = -14.2;
+          player.vy = JUMP_POWER;
           player.onGround = false;
           player.jumping = true;
           player.rolling = false;
@@ -729,14 +1035,13 @@
           player.vx = player.facing * 17;
           player.rolling = false;
           sfxDash();
+          spawnParticles(player.x + player.w / 2, player.y + player.h, "#8fd3ff", 12, 4);
         }
       }
 
-      // Gravitation
-      player.vy += 0.72;
+      player.vy += GRAVITY;
       if (player.vy > 18) player.vy = 18;
 
-      // Horizontal
       player.x += player.vx;
 
       if (player.x < 0) {
@@ -762,7 +1067,6 @@
         }
       }
 
-      // Vertikal
       player.y += player.vy;
       player.onGround = false;
 
@@ -818,7 +1122,7 @@
 
       if (jumpPressed) {
         player.rail = null;
-        player.vy = -13.5;
+        player.vy = JUMP_POWER;
         player.jumping = true;
         player.vx = r.dir * r.speed * 0.7;
         sfxJump();
@@ -857,6 +1161,37 @@
           rings++;
           score += 10;
           sfxRing();
+          spawnParticles(r.x, r.y, "#ffd54f", 8, 3);
+        }
+      }
+    }
+
+    function checkHearts() {
+      const pcx = player.x + player.w / 2;
+      const pcy = player.y + player.h / 2;
+
+      for (const h of level.hearts) {
+        if (!h.taken && Math.hypot(pcx - h.x, pcy - h.y) < 36) {
+          h.taken = true;
+          lives = Math.min(9, lives + 1);
+          sfxHeart();
+          spawnParticles(h.x, h.y, "#ff4081", 14, 4);
+        }
+      }
+    }
+
+    function checkCheckpoints() {
+      for (const c of level.checkpoints) {
+        if (!c.active && intersects(player, c)) {
+          c.active = true;
+          checkpoint = {
+            level: currentLevel,
+            x: player.x,
+            y: player.y
+          };
+
+          sfxCheckpoint();
+          spawnParticles(c.x + c.w / 2, c.y + 20, "#69f0ae", 16, 4);
         }
       }
     }
@@ -870,6 +1205,7 @@
           player.facing = b.dir;
           player.spinDashTimer = Math.max(player.spinDashTimer, 0.15);
           sfxBoost();
+          spawnParticles(player.x + player.w / 2, player.y + player.h, "#ff7043", 10, 4);
         }
       }
     }
@@ -883,6 +1219,7 @@
           player.onGround = false;
           player.jumping = true;
           sfxSpring();
+          spawnParticles(s.x + s.w / 2, s.y, "#ffd54f", 10, 3);
         }
       }
     }
@@ -904,6 +1241,7 @@
           player.spinCharge = 0;
           player.facing = r.dir;
           sfxBoost();
+          spawnParticles(player.x + player.w / 2, player.y + player.h, "#90a4ae", 10, 3);
           break;
         }
       }
@@ -934,6 +1272,7 @@
           };
 
           sfxDash();
+          spawnParticles(pcx, pcy + 15, "#ffd54f", 12, 4);
           break;
         }
       }
@@ -945,7 +1284,7 @@
       for (const e of level.enemies) {
         if (e.dead) continue;
 
-        e.x += e.dir * 1.5;
+        e.x += e.dir * ENEMY_SPEED;
 
         if (e.x < e.minX || e.x + e.w > e.maxX) {
           e.dir *= -1;
@@ -962,6 +1301,7 @@
             e.dead = true;
             score += 100;
             sfxEnemy();
+            spawnParticles(e.x + e.w / 2, e.y + e.h / 2, "#ff8a65", 16, 5);
 
             if (player.vy > 2) {
               player.vy = -10;
@@ -988,14 +1328,14 @@
         b.vulnerable = false;
 
         b.dir = player.x < b.x ? -1 : 1;
-        b.x += b.dir * 1.8;
+        b.x += b.dir * (EASY ? 1.3 : 1.8);
         b.y = b.baseY + Math.sin(b.phase) * 35;
 
         if (b.x < 100) b.x = 100;
         if (b.x > level.width - 190) b.x = level.width - 190;
 
         if (b.shootTimer <= 0) {
-          b.shootTimer = 1.4;
+          b.shootTimer = EASY ? 1.8 : 1.4;
 
           const dir = player.x < b.x ? -1 : 1;
 
@@ -1004,7 +1344,7 @@
             y: b.y + b.h / 2,
             w: 14,
             h: 14,
-            vx: dir * 5.5,
+            vx: dir * BOSS_BULLET_SPEED,
             vy: 0
           });
 
@@ -1013,7 +1353,7 @@
 
         if (b.timer <= 0) {
           b.state = "vulnerable";
-          b.timer = 1.7;
+          b.timer = EASY ? 2.0 : 1.7;
           b.vulnerable = true;
         }
       } else if (b.state === "vulnerable") {
@@ -1022,7 +1362,7 @@
 
         if (b.timer <= 0) {
           b.state = "hover";
-          b.timer = 2.2 + Math.random() * 1.2;
+          b.timer = (EASY ? 1.8 : 2.2) + Math.random() * 1.0;
           b.vulnerable = false;
           b.shootTimer = 0.5;
         }
@@ -1041,6 +1381,7 @@
           b.hitFlash = 0.3;
           score += 200;
           sfxBossHit();
+          spawnParticles(b.x + b.w / 2, b.y + b.h / 2, "#ffeb3b", 22, 6);
 
           if (player.vy > 2) {
             player.vy = -11;
@@ -1053,6 +1394,7 @@
             stopMusic();
             sfxWin();
             score += 1000;
+            spawnParticles(b.x + b.w / 2, b.y + b.h / 2, "#ff5252", 40, 8);
             return;
           }
         } else if (b.invuln <= 0) {
@@ -1086,7 +1428,14 @@
       if (player.loop || player.rail) return;
 
       for (const s of level.spikes) {
-        if (intersects(player, s)) {
+        const hit = {
+          x: s.x + 8,
+          y: s.y + 10,
+          w: s.w - 16,
+          h: s.h - 10
+        };
+
+        if (intersects(player, hit)) {
           hurtPlayer();
         }
       }
@@ -1099,8 +1448,52 @@
         gameState = "levelClear";
         stopMusic();
         sfxLevelClear();
-
         score += rings * 100 + Math.max(0, 10000 - Math.floor(time * 10));
+        spawnParticles(level.goal.x + 20, level.goal.y + 40, "#ffd54f", 30, 7);
+      }
+    }
+
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+
+        p.life -= STEP;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.12;
+
+        if (p.life <= 0) {
+          particles.splice(i, 1);
+        }
+      }
+    }
+
+    function updateTrail() {
+      const fast =
+        Math.abs(player.vx) > 10 ||
+        player.spinDashTimer > 0 ||
+        player.dashTime > 0 ||
+        player.loop ||
+        player.rail;
+
+      if (fast) {
+        player.trail.push({
+          x: player.x + player.w / 2,
+          y: player.y + player.h / 2,
+          life: 0.22
+        });
+
+        if (player.trail.length > 28) {
+          player.trail.shift();
+        }
+      }
+
+      for (let i = player.trail.length - 1; i >= 0; i--) {
+        player.trail[i].life -= STEP;
+
+        if (player.trail[i].life <= 0) {
+          player.trail.splice(i, 1);
+        }
       }
     }
 
@@ -1133,6 +1526,8 @@
       }
 
       collectRings();
+      checkHearts();
+      checkCheckpoints();
       updateEnemies();
 
       if (level.boss) {
@@ -1142,6 +1537,8 @@
       updateBullets();
       checkSpikes();
       checkGoal();
+      updateParticles();
+      updateTrail();
 
       if (player.y > H + 300) {
         killPlayer();
@@ -1153,7 +1550,7 @@
       dashPressed = false;
     }
 
-    /* ------------------------- DRAW ------------------------- */
+    /* ---------------- DRAW ---------------- */
 
     function mod(a, n) {
       return ((a % n) + n) % n;
@@ -1177,6 +1574,41 @@
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, W, H);
 
+      if (currentLevel === 2) {
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+
+        for (let i = 0; i < 70; i++) {
+          const x = mod(i * 137 - camX * 0.05, W);
+          const y = (i * 61) % 240 + 15;
+          const size = (i % 3) + 1;
+
+          ctx.fillRect(x, y, size, size);
+        }
+
+        ctx.fillStyle = "#e6e6fa";
+        ctx.beginPath();
+        ctx.arc(W - 150, 90, 38, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = theme.skyTop;
+        ctx.beginPath();
+        ctx.arc(W - 165, 80, 34, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        const sunX = W - 150 - mod(camX * 0.03, 40);
+        const sunY = 90;
+
+        ctx.fillStyle = "rgba(255,255,180,0.35)";
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, 65, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#fff176";
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, 40, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       ctx.fillStyle = "rgba(255,255,255,0.82)";
       for (let i = 0; i < 5; i++) {
         const x = mod(i * 320 - camX * 0.12, W + 320) - 160;
@@ -1186,6 +1618,7 @@
 
       ctx.fillStyle = theme.hill1;
       const off1 = mod(camX * 0.22, 560);
+
       for (let i = -1; i <= Math.ceil(W / 560) + 1; i++) {
         const x = i * 560 - off1;
         ctx.beginPath();
@@ -1195,6 +1628,7 @@
 
       ctx.fillStyle = theme.hill2;
       const off2 = mod(camX * 0.42, 420);
+
       for (let i = -1; i <= Math.ceil(W / 420) + 1; i++) {
         const x = i * 420 - off2;
         ctx.beginPath();
@@ -1207,6 +1641,12 @@
       const x = l.cx - camX;
 
       if (x + l.r < -100 || x - l.r > W + 100) return;
+
+      ctx.strokeStyle = "rgba(255,213,79,0.35)";
+      ctx.lineWidth = 20;
+      ctx.beginPath();
+      ctx.arc(x, l.cy, l.r + 5, 0, Math.PI * 2);
+      ctx.stroke();
 
       ctx.strokeStyle = "#ffd54f";
       ctx.lineWidth = 12;
@@ -1257,9 +1697,14 @@
       ctx.fillStyle = "#ff7043";
       ctx.fillRect(x, b.y, b.w, b.h);
 
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.fillRect(x, b.y, b.w, 5);
+
+      const offset = Math.floor(animT * 20) % 18;
+
       ctx.fillStyle = "#ffffff";
 
-      for (let i = 8; i < b.w - 12; i += 18) {
+      for (let i = 8 + offset; i < b.w - 12; i += 18) {
         ctx.beginPath();
 
         if (b.dir > 0) {
@@ -1307,21 +1752,34 @@
         ctx.closePath();
         ctx.fill();
       }
+
+      ctx.fillStyle = "rgba(255,255,255,0.25)";
+
+      for (let i = 0; i < s.w; i += 18) {
+        ctx.beginPath();
+        ctx.moveTo(x + i + 4, s.y + s.h);
+        ctx.lineTo(x + i + 9, s.y + 5);
+        ctx.lineTo(x + i + 11, s.y + s.h);
+        ctx.closePath();
+        ctx.fill();
+      }
     }
 
     function drawRing(x, y) {
       if (x < -50 || x > W + 50) return;
 
+      const pulse = Math.sin(animT * 6 + x * 0.02) * 1.5;
+
       ctx.strokeStyle = "#ffb300";
       ctx.lineWidth = 7;
       ctx.beginPath();
-      ctx.arc(x, y, 14, 0, Math.PI * 2);
+      ctx.arc(x, y, 14 + pulse, 0, Math.PI * 2);
       ctx.stroke();
 
       ctx.strokeStyle = "#fff176";
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(x, y, 10, 0, Math.PI * 2);
+      ctx.arc(x, y, 10 + pulse * 0.5, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -1347,6 +1805,47 @@
       ctx.arc(x + 8, e.y + e.h, 6, 0, Math.PI * 2);
       ctx.arc(x + 26, e.y + e.h, 6, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    function drawCheckpoint(c, camX) {
+      const x = c.x - camX;
+
+      if (x + 80 < 0 || x > W + 80) return;
+
+      ctx.fillStyle = "#90a4ae";
+      ctx.fillRect(x + 10, c.y, 6, c.h);
+
+      ctx.fillStyle = c.active ? "#69f0ae" : "#ffd54f";
+
+      ctx.beginPath();
+      ctx.moveTo(x + 16, c.y + 5);
+      ctx.lineTo(x + 52, c.y + 18);
+      ctx.lineTo(x + 16, c.y + 31);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#455a64";
+      ctx.fillRect(x, c.y + c.h - 8, 26, 8);
+    }
+
+    function drawHeart(x, y, scale = 1) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+
+      ctx.fillStyle = "#ff4081";
+      ctx.beginPath();
+      ctx.moveTo(0, 5);
+      ctx.bezierCurveTo(12, -8, 20, 8, 0, 20);
+      ctx.bezierCurveTo(-20, 8, -12, -8, 0, 5);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.beginPath();
+      ctx.arc(-5, 2, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
     }
 
     function drawGoal(camX) {
@@ -1437,6 +1936,13 @@
 
         ctx.fillStyle = gt.grass;
         ctx.fillRect(x, p.y, p.w, 10);
+
+        ctx.fillStyle = "rgba(255,255,255,0.15)";
+        ctx.fillRect(x, p.y, p.w, 4);
+      }
+
+      for (const c of level.checkpoints) {
+        drawCheckpoint(c, camX);
       }
 
       for (const r of level.rails) {
@@ -1453,6 +1959,13 @@
 
       for (const s of level.spikes) {
         drawSpike(s, camX);
+      }
+
+      for (const h of level.hearts) {
+        if (!h.taken) {
+          const pulse = 1 + Math.sin(animT * 4) * 0.08;
+          drawHeart(h.x - camX, h.y, pulse);
+        }
       }
 
       for (const r of level.rings) {
@@ -1473,6 +1986,35 @@
       for (const b of level.bullets) {
         drawBullet(b, camX);
       }
+    }
+
+    function drawTrail(camX) {
+      for (const t of player.trail) {
+        const x = t.x - camX;
+        const a = Math.max(0, t.life / 0.22) * 0.25;
+
+        ctx.fillStyle = `rgba(89,182,255,${a})`;
+        ctx.beginPath();
+        ctx.arc(x, t.y, 10 * (t.life / 0.22) + 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawParticles(camX) {
+      for (const p of particles) {
+        const x = p.x - camX;
+
+        if (x < -20 || x > W + 20) continue;
+
+        ctx.globalAlpha = Math.min(1, p.life * 2);
+        ctx.fillStyle = p.color;
+
+        ctx.beginPath();
+        ctx.arc(x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = 1;
     }
 
     function drawPlayer(camX) {
@@ -1587,7 +2129,10 @@
 
     function drawHUD() {
       ctx.fillStyle = "rgba(0,0,0,0.28)";
-      ctx.fillRect(12, 12, 240, 120);
+      ctx.fillRect(12, 12, 250, 120);
+
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.fillRect(12, 12, 250, 4);
 
       ctx.textAlign = "left";
       ctx.font = "bold 22px Arial";
@@ -1648,18 +2193,17 @@
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fillRect(0, 0, W, H);
 
-        drawCenterText("SPEED DASH 2", 140, 68);
-        drawCenterText("Sonic-like Prototype", 190, 28);
+        drawCenterText("SPEED DASH MOBILE", 140, 64);
+        drawCenterText("Easy + Polish Prototype", 190, 28);
 
         ctx.font = "22px Arial";
         ctx.fillStyle = "#ffffff";
 
-        ctx.fillText("Pfeile / WASD: bewegen | Space: springen | Shift / X: Dash", W / 2, 270);
-        ctx.fillText("Unten halten + Space tippen: Spin-Dash | Unten loslassen: Start", W / 2, 305);
-        ctx.fillText("Unten + Bewegung: rollen | M: Sound an/aus", W / 2, 340);
-        ctx.fillText("Loopings brauchen Speed. Rails erreichst du per Sprung.", W / 2, 375);
+        ctx.fillText("Touch-Buttons oder Tastatur", W / 2, 270);
+        ctx.fillText("Unten + Space tippen = Spin-Dash | Unten loslassen = Start", W / 2, 305);
+        ctx.fillText("M = Ton an/aus | Checkpoints & Herzen machen es leichter", W / 2, 340);
 
-        drawCenterText("Drücke ENTER oder SPACE", 450, 32, "#7CFC90");
+        drawCenterText("TIPPE / DRÜCKE ENTER ODER SPACE", 450, 32, "#7CFC90");
       }
 
       if (gameState === "levelIntro" && level) {
@@ -1669,7 +2213,7 @@
         drawCenterText(`LEVEL ${currentLevel + 1}`, 190, 36, "#9ccc65");
         drawCenterText(level.name, 260, 64);
         drawCenterText(`Leben: ${lives}`, 330, 28);
-        drawCenterText("Drücke ENTER oder SPACE", 420, 30, "#7CFC90");
+        drawCenterText("TIPPE / DRÜCKE ENTER ODER SPACE", 420, 30, "#7CFC90");
       }
 
       if (gameState === "dead") {
@@ -1678,7 +2222,7 @@
 
         drawCenterText("DU WURDEST GETROFFEN", 220, 52, "#ff6b6b");
         drawCenterText(`Leben übrig: ${lives}`, 300, 30);
-        drawCenterText("Drücke ENTER für Neustart", 380, 28, "#7CFC90");
+        drawCenterText("TIPPE / ENTER für Neustart", 380, 28, "#7CFC90");
       }
 
       if (gameState === "levelClear") {
@@ -1688,7 +2232,7 @@
         drawCenterText("LEVEL GESCHAFFT!", 210, 64, "#ffd54f");
         drawCenterText(`Score: ${score}`, 290, 32);
         drawCenterText(`Zeit: ${time.toFixed(1)}s`, 335, 32);
-        drawCenterText("Drücke ENTER für das nächste Level", 420, 28, "#7CFC90");
+        drawCenterText("TIPPE / ENTER für das nächste Level", 420, 28, "#7CFC90");
       }
 
       if (gameState === "gameover") {
@@ -1697,7 +2241,7 @@
 
         drawCenterText("GAME OVER", 230, 72, "#ff5252");
         drawCenterText(`Score: ${score}`, 310, 32);
-        drawCenterText("Drücke ENTER für Titelbildschirm", 400, 28, "#7CFC90");
+        drawCenterText("TIPPE / ENTER für Titelbildschirm", 400, 28, "#7CFC90");
       }
 
       if (gameState === "win") {
@@ -1707,7 +2251,7 @@
         drawCenterText("BOSS BESIEGT!", 200, 68, "#ffd54f");
         drawCenterText("Du hast den Prototype durchgespielt!", 270, 30);
         drawCenterText(`Score: ${score}`, 330, 34);
-        drawCenterText("Drücke ENTER für Titelbildschirm", 420, 28, "#7CFC90");
+        drawCenterText("TIPPE / ENTER für Titelbildschirm", 420, 28, "#7CFC90");
       }
     }
 
@@ -1720,7 +2264,9 @@
 
       if (level) {
         drawWorld(camX);
+        drawTrail(camX);
         drawPlayer(camX);
+        drawParticles(camX);
       }
 
       if (gameState !== "title") {
@@ -1730,7 +2276,7 @@
       drawOverlays();
     }
 
-    /* ------------------------- GAME LOOP ------------------------- */
+    /* ---------------- GAME LOOP ---------------- */
 
     let last = performance.now();
     let accumulator = 0;
@@ -1741,6 +2287,7 @@
 
       if (dt > 0.1) dt = 0.1;
 
+      animT += dt;
       accumulator += dt;
 
       while (accumulator >= STEP) {
