@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Speed Dash Prototype</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #071023;
+      overflow: hidden;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+    }
+
+    canvas {
+      border: 4px solid #000;
+      border-radius: 12px;
+      box-shadow: 0 12px 50px rgba(0, 0, 0, 0.55);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" width="960" height="540"></canvas>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const W = canvas.width;
+    const H = canvas.height;
+    const STEP = 1 / 60;
+    const LEVEL_W = 5200;
+
+    let gameState = "title"; // title, play, dead, win
+    let score = 0;
+    let rings = 0;
+    let time = 0;
+
+    const keys = {};
+    let jumpPressed = false;
+    let dashPressed = false;
+
+    const player = {
+      x: 80,
+      y: 320,
+      w: 26,
+      h: 34,
+      vx: 0,
+      vy: 0,
+      onGround: false,
+      facing: 1,
+      rolling: false,
+      dashTime: 0,
+      dashCooldown: 0,
+      invuln: 0,
+      spinAngle: 0,
+      jumping: false
+    };
+
+    const platforms = [
+      // Bodenabschnitte
+      { x: 0,    y: 480, w: 1200, h: 60 },
+      { x: 1350, y: 480, w: 800,  h: 60 },
+      { x: 2300, y: 440, w: 500,  h: 100 },
+      { x: 2950, y: 480, w: 700,  h: 60 },
+      { x: 3800, y: 430, w: 350,  h: 110 },
+      { x: 4300, y: 480, w: 900,  h: 60 },
+
+      // Schwebende Plattformen
+      { x: 650,  y: 360, w: 220, h: 24 },
+      { x: 980,  y: 290, w: 180, h: 24 },
+      { x: 1500, y: 360, w: 240, h: 24 },
+      { x: 1830, y: 280, w: 180, h: 24 },
+      { x: 2450, y: 330, w: 220, h: 24 },
+      { x: 3100, y: 350, w: 250, h: 24 },
+      { x: 3450, y: 280, w: 180, h: 24 },
+      { x: 4500, y: 350, w: 250, h: 24 }
+    ];
+
+    const spikes = [
+      { x: 1500, y: 456, w: 70, h: 24 },
+      { x: 3300, y: 456, w: 80, h: 24 },
+      { x: 4700, y: 456, w: 80, h: 24 }
+    ];
+
+    const springs = [
+      { x: 2090, y: 456, w: 48, h: 24 },
+      { x: 3590, y: 456, w: 48, h: 24 }
+    ];
+
+    const goal = {
+      x: 5050,
+      y: 360,
+      w: 40,
+      h: 120
+    };
+
+    function createRings() {
+      const arr = [];
+
+      const add = (x, y, n = 1, dx = 38) => {
+        for (let i = 0; i < n; i++) {
+          arr.push({ x: x + i * dx, y, taken: false });
+        }
+      };
+
+      add(220, 420, 6);
+      add(680, 310, 4);
+      add(1000, 240, 3);
+      add(1400, 430, 5);
+      add(1540, 310, 4);
+      add(1860, 230, 3);
+      add(2350, 390, 4);
+      add(2500, 280, 3);
+      add(3000, 430, 5);
+      add(3150, 300, 4);
+      add(3500, 230, 3);
+      add(3850, 380, 4);
+      add(4350, 430, 6);
+      add(4550, 300, 4);
+      add(4900, 430, 4);
+
+      return arr;
+    }
+
+    function createEnemies() {
+      return [
+        { x: 760,  y: 446, w: 34, h: 34, dir: 1,  minX: 680,  maxX: 1100, dead: false },
+        { x: 1650, y: 446, w: 34, h: 34, dir: -1, minX: 1600, maxX: 2050, dead: false },
+        { x: 3050, y: 446, w: 34, h: 34, dir: 1,  minX: 3000, maxX: 3200, dead: false },
+        { x: 4450, y: 446, w: 34, h: 34, dir: -1, minX: 4350, maxX: 4600, dead: false }
+      ];
+    }
+
+    let ringsArr = createRings();
+    let enemiesArr = createEnemies();
+
+    function resetGame() {
+      gameState = "play";
+      score = 0;
+      rings = 0;
+      time = 0;
+
+      player.x = 80;
+      player.y = 320;
+      player.vx = 0;
+      player.vy = 0;
+      player.onGround = false;
+      player.facing = 1;
+      player.rolling = false;
+      player.dashTime = 0;
+      player.dashCooldown = 0;
+      player.invuln = 0;
+      player.spinAngle = 0;
+      player.jumping = false;
+
+      ringsArr = createRings();
+      enemiesArr = createEnemies();
+    }
+
+    function handleStartReset() {
+      if (gameState === "title" || gameState === "dead" || gameState === "win") {
+        resetGame();
+        jumpPressed = false;
+        dashPressed = false;
+      }
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+        e.preventDefault();
+      }
+
+      if (!keys[e.code]) {
+        if (["Space", "ArrowUp", "KeyW"].includes(e.code)) {
+          jumpPressed = true;
+        }
+
+        if (["ShiftLeft", "ShiftRight", "KeyX"].includes(e.code)) {
+          dashPressed = true;
+        }
+
+        if (["Enter", "Space"].includes(e.code)) {
+          handleStartReset();
+        }
+      }
+
+      keys[e.code] = true;
+    });
+
+    window.addEventListener("keyup", (e) => {
+      keys[e.code] = false;
+
+      // Variable Sprunghöhe: Space loslassen springt kürzer
+      if (gameState === "play" && e.code === "Space" && player.vy < -6) {
+        player.vy = -6;
+      }
+    });
+
+    function intersects(a, b) {
+      return (
+        a.x < b.x + b.w &&
+        a.x + a.w > b.x &&
+        a.y < b.y + b.h &&
+        a.y + a.h > b.y
+      );
+    }
+
+    function hurtPlayer() {
+      if (player.invuln > 0) return;
+
+      if (rings > 0) {
+        rings = 0;
+        player.invuln = 2;
+        player.vy = -9;
+        player.vx = -player.facing * 7;
+      } else {
+        gameState = "dead";
+      }
+    }
+
+    function fixedUpdate() {
+      if (gameState !== "play") {
+        jumpPressed = false;
+        dashPressed = false;
+        return;
+      }
+
+      time += STEP;
+
+      if (player.invuln > 0) player.invuln -= STEP;
+      if (player.dashCooldown > 0) player.dashCooldown -= STEP;
+
+      const left = keys.ArrowLeft || keys.KeyA;
+      const right = keys.ArrowRight || keys.KeyD;
+      const down = keys.ArrowDown || keys.KeyS;
+
+      // Rollen / Rolling
+      if (player.onGround && down && Math.abs(player.vx) > 3.2) {
+        player.rolling = true;
+      }
+
+      if (player.rolling && (!down || Math.abs(player.vx) < 1.2 || !player.onGround)) {
+        player.rolling = false;
+      }
+
+      const maxSpeed = player.dashTime > 0 ? 17 : player.rolling ? 12 : 8.8;
+
+      if (player.dashTime > 0) {
+        player.vx = player.facing * 17;
+        player.dashTime -= STEP;
+      } else {
+        if (left && !right) {
+          player.vx -= player.onGround ? 0.55 : 0.32;
+          player.facing = -1;
+        }
+
+        if (right && !left) {
+          player.vx += player.onGround ? 0.55 : 0.32;
+          player.facing = 1;
+        }
+
+        if ((!left && !right) || (left && right)) {
+          const friction = player.onGround ? (player.rolling ? 0.99 : 0.93) : 0.985;
+          player.vx *= friction;
+
+          if (Math.abs(player.vx) < 0.12) {
+            player.vx = 0;
+          }
+        }
+
+        if (Math.abs(player.vx) > maxSpeed) {
+          player.vx = Math.sign(player.vx) * maxSpeed;
+        }
+      }
+
+      // Springen
+      if (jumpPressed && player.onGround) {
+        player.vy = -14.2;
+        player.onGround = false;
+        player.jumping = true;
+        player.rolling = false;
+      }
+
+      if (player.jumping && !keys.Space && player.vy < -7) {
+        player.vy = -7;
+      }
+
+      // Dash / Boost
+      if (dashPressed && player.onGround && player.dashCooldown <= 0) {
+        player.dashTime = 0.26;
+        player.dashCooldown = 0.6;
+        player.vx = player.facing * 17;
+        player.rolling = false;
+      }
+
+      // Gravitation
+      player.vy += 0.72;
+      if (player.vy > 18) player.vy = 18;
+
+      // Horizontale Bewegung + Kollision
+      player.x += player.vx;
+
+      if (player.x < 0) {
+        player.x = 0;
+        player.vx = 0;
+      }
+
+      if (player.x > LEVEL_W - player.w) {
+        player.x = LEVEL_W - player.w;
+        player.vx = 0;
+      }
+
+      for (const p of platforms) {
+        if (intersects(player, p)) {
+          if (player.vx > 0) {
+            player.x = p.x - player.w;
+          } else if (player.vx < 0) {
+            player.x = p.x + p.w;
+          }
+
+          player.vx = 0;
+          player.dashTime = 0;
+        }
+      }
+
+      // Vertikale Bewegung + Kollision
+      player.y += player.vy;
+      player.onGround = false;
+
+      for (const p of platforms) {
+        if (intersects(player, p)) {
+          if (player.vy > 0) {
+            player.y = p.y - player.h;
+            player.vy = 0;
+            player.onGround = true;
+            player.jumping = false;
+          } else if (player.vy < 0) {
+            player.y = p.y + p.h;
+            player.vy = 0;
+          }
+        }
+      }
+
+      // Sprungfedern
+      for (const s of springs) {
+        if (intersects(player, s) && player.vy >= 0) {
+          player.vy = -19;
+          player.onGround = false;
+          player.jumping = true;
+        }
+      }
+
+      // Ringe einsammeln
+      const pcx = player.x + player.w / 2;
+      const pcy = player.y + player.h / 2;
+
+      for (const r of ringsArr) {
+        if (!r.taken && Math.hypot(pcx - r.x, pcy - r.y) < 34) {
+          r.taken = true;
+          rings++;
+          score += 10;
+        }
+      }
+
+      // Gegner
+      for (const e of enemiesArr) {
+        if (e.dead) continue;
+
+        e.x += e.dir * 1.5;
+
+        if (e.x < e.minX || e.x + e.w > e.maxX) {
+          e.dir *= -1;
+        }
+
+        if (intersects(player, e)) {
+          const attack = player.dashTime > 0 || player.rolling || player.vy > 2;
+
+          if (attack) {
+            e.dead = true;
+            score += 100;
+
+            if (player.vy > 2) {
+              player.vy = -10;
+            }
+          } else {
+            hurtPlayer();
+          }
+        }
+      }
+
+      // Stacheln
+      for (const s of spikes) {
+        if (intersects(player, s)) {
+          hurtPlayer();
+        }
+      }
+
+      // Ziel
+      if (intersects(player, goal)) {
+        gameState = "win";
+        score += rings * 100 + Math.max(0, 10000 - Math.floor(time * 10));
+      }
+
+      // Runterfallen
+      if (player.y > H + 300) {
+        gameState = "dead";
+      }
+
+      player.spinAngle += Math.abs(player.vx) * 0.06 + (player.onGround ? 0.02 : 0.28);
+
+      jumpPressed = false;
+      dashPressed = false;
+    }
+
+    function mod(a, n) {
+      return ((a % n) + n) % n;
+    }
+
+    function drawCloud(x, y) {
+      ctx.beginPath();
+      ctx.arc(x, y, 26, 0, Math.PI * 2);
+      ctx.arc(x + 30, y - 10, 30, 0, Math.PI * 2);
+      ctx.arc(x + 65, y, 26, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawBackground(camX) {
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, "#69c4ff");
+      sky.addColorStop(1, "#eaffff");
+
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, W, H);
+
+      // Wolken
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      for (let i = 0; i < 5; i++) {
+        const x = mod(i * 320 - camX * 0.12, W + 320) - 160;
+        const y = 60 + i * 22;
+        drawCloud(x, y);
+      }
+
+      // Hügel hinten
+      ctx.fillStyle = "#83dc8f";
+      const off1 = mod(camX * 0.22, 560);
+      for (let i = -1; i <= Math.ceil(W / 560) + 1; i++) {
+        const x = i * 560 - off1;
+        ctx.beginPath();
+        ctx.arc(x, H + 130, 230, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Hügel vorne
+      ctx.fillStyle = "#54c46c";
+      const off2 = mod(camX * 0.42, 420);
+      for (let i = -1; i <= Math.ceil(W / 420) + 1; i++) {
+        const x = i * 420 - off2;
+        ctx.beginPath();
+        ctx.arc(x, H + 160, 190, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawRing(x, y) {
+      if (x < -50 || x > W + 50) return;
+
+      ctx.strokeStyle = "#ffb300";
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.arc(x, y, 14, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = "#fff176";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x, y, 10, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    function drawEnemy(e, camX) {
+      const x = e.x - camX;
+
+      if (x + e.w < 0 || x > W) return;
+
+      ctx.fillStyle = "#c62828";
+      ctx.fillRect(x, e.y + 8, e.w, e.h - 8);
+
+      ctx.fillStyle = "#eceff1";
+      ctx.fillRect(x + 4, e.y, e.w - 8, 12);
+
+      ctx.fillStyle = "#111";
+      ctx.beginPath();
+      ctx.arc(x + 10, e.y + 20, 4, 0, Math.PI * 2);
+      ctx.arc(x + 24, e.y + 20, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#212121";
+      ctx.beginPath();
+      ctx.arc(x + 8, e.y + e.h, 6, 0, Math.PI * 2);
+      ctx.arc(x + 26, e.y + e.h, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawGoal(camX) {
+      const x = goal.x - camX;
+
+      if (x + goal.w < -100 || x > W + 100) return;
+
+      ctx.fillStyle = "#cfd8dc";
+      ctx.fillRect(x + 16, goal.y, 8, goal.h);
+
+      ctx.fillStyle = "#e53935";
+      ctx.fillRect(x - 25, goal.y, 80, 40);
+
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 22px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("ZIEL", x + 15, goal.y + 28);
+    }
+
+    function drawWorld(camX) {
+      // Plattformen
+      for (const p of platforms) {
+        const x = p.x - camX;
+
+        if (x + p.w < 0 || x > W) continue;
+
+        ctx.fillStyle = "#7b4a21";
+        ctx.fillRect(x, p.y, p.w, p.h);
+
+        ctx.fillStyle = "rgba(0,0,0,0.15)";
+        ctx.fillRect(x, p.y + 10, p.w, p.h - 10);
+
+        ctx.fillStyle = "#49d651";
+        ctx.fillRect(x, p.y, p.w, 10);
+      }
+
+      // Sprungfedern
+      for (const s of springs) {
+        const x = s.x - camX;
+
+        if (x + s.w < 0 || x > W) continue;
+
+        ctx.fillStyle = "#c62828";
+        ctx.fillRect(x, s.y + 10, s.w, s.h - 10);
+
+        ctx.fillStyle = "#ffd54f";
+        ctx.fillRect(x + 4, s.y, s.w - 8, 12);
+
+        ctx.fillStyle = "#fff59d";
+        ctx.fillRect(x + 4, s.y, s.w - 8, 4);
+      }
+
+      // Stacheln
+      for (const s of spikes) {
+        const x = s.x - camX;
+
+        if (x + s.w < 0 || x > W) continue;
+
+        ctx.fillStyle = "#cfd8dc";
+
+        for (let i = 0; i < s.w; i += 18) {
+          ctx.beginPath();
+          ctx.moveTo(x + i, s.y + s.h);
+          ctx.lineTo(x + i + 9, s.y);
+          ctx.lineTo(x + i + 18, s.y + s.h);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+
+      // Ringe
+      for (const r of ringsArr) {
+        if (!r.taken) {
+          drawRing(r.x - camX, r.y);
+        }
+      }
+
+      // Gegner
+      for (const e of enemiesArr) {
+        if (!e.dead) {
+          drawEnemy(e, camX);
+        }
+      }
+
+      drawGoal(camX);
+    }
+
+    function drawPlayer(camX) {
+      const px = player.x - camX;
+      const py = player.y;
+
+      ctx.save();
+
+      if (player.invuln > 0 && Math.floor(player.invuln * 12) % 2 === 0) {
+        ctx.globalAlpha = 0.45;
+      }
+
+      const cx = px + player.w / 2;
+      const cy = py + player.h / 2;
+
+      if (player.dashTime > 0 || player.rolling || !player.onGround) {
+        // Spin-Ball
+        ctx.translate(cx, cy);
+        ctx.rotate(player.spinAngle * player.facing);
+
+        ctx.fillStyle = "#1d5df0";
+        ctx.beginPath();
+        ctx.arc(0, 0, 17, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "#8fd3ff";
+        ctx.lineWidth = 3;
+
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath();
+          ctx.arc(
+            0,
+            0,
+            11,
+            i * 2.1 + player.spinAngle,
+            i * 2.1 + player.spinAngle + 1.1
+          );
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = "#ffd9a0";
+        ctx.beginPath();
+        ctx.arc(6, 4, 5, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Stehende Figur
+        ctx.translate(cx, cy);
+        ctx.scale(player.facing, 1);
+
+        // Stacheln hinten
+        ctx.fillStyle = "#1d5df0";
+
+        ctx.beginPath();
+        ctx.moveTo(-6, -8);
+        ctx.lineTo(-23, -15);
+        ctx.lineTo(-9, -1);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(-4, -16);
+        ctx.lineTo(-20, -27);
+        ctx.lineTo(-4, -6);
+        ctx.closePath();
+        ctx.fill();
+
+        // Körper
+        ctx.beginPath();
+        ctx.ellipse(0, 2, 13, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Bauch
+        ctx.fillStyle = "#ffd9a0";
+        ctx.beginPath();
+        ctx.ellipse(3, 6, 7, 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Auge
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.ellipse(7, -7, 6, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#111";
+        ctx.beginPath();
+        ctx.arc(9, -7, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Schuhe
+        ctx.fillStyle = "#e53935";
+        ctx.fillRect(-8, 12, 13, 7);
+        ctx.fillRect(1, 14, 13, 7);
+      }
+
+      ctx.restore();
+    }
+
+    function drawHUD() {
+      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      ctx.fillRect(12, 12, 230, 92);
+
+      ctx.textAlign = "left";
+      ctx.font = "bold 22px Arial";
+
+      ctx.fillStyle = "white";
+      ctx.fillText(`SCORE ${score}`, 26, 40);
+
+      ctx.fillStyle = rings === 0 ? "#ff6b6b" : "#ffd54f";
+      ctx.fillText(`RINGE ${rings}`, 26, 68);
+
+      ctx.fillStyle = "white";
+      ctx.fillText(`ZEIT ${time.toFixed(1)}`, 26, 96);
+    }
+
+    function drawOverlays() {
+      ctx.textAlign = "center";
+
+      if (gameState === "title") {
+        ctx.fillStyle = "rgba(0,0,0,0.45)";
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 58px Arial";
+        ctx.fillText("SPEED DASH PROTOTYPE", W / 2, 180);
+
+        ctx.font = "bold 26px Arial";
+        ctx.fillText("Ein Sonic-inspirierter 2D-Platformer", W / 2, 230);
+
+        ctx.font = "22px Arial";
+        ctx.fillText("Pfeile / WASD: laufen | Space: springen | Shift / X: Dash", W / 2, 310);
+        ctx.fillText("Unten + Bewegung: rollen | Ringe sammeln, Gegner besiegen", W / 2, 345);
+
+        ctx.font = "bold 30px Arial";
+        ctx.fillStyle = "#7CFC90";
+        ctx.fillText("Drücke ENTER oder SPACE zum Starten", W / 2, 430);
+      }
+
+      if (gameState === "dead") {
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = "#ff6b6b";
+        ctx.font = "bold 64px Arial";
+        ctx.fillText("GAME OVER", W / 2, 230);
+
+        ctx.fillStyle = "white";
+        ctx.font = "bold 28px Arial";
+        ctx.fillText("Drücke ENTER für Neustart", W / 2, 320);
+      }
+
+      if (gameState === "win") {
+        ctx.fillStyle = "rgba(0,0,0,0.45)";
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = "#ffd54f";
+        ctx.font = "bold 64px Arial";
+        ctx.fillText("ZIEL ERREICHT!", W / 2, 210);
+
+        ctx.fillStyle = "white";
+        ctx.font = "bold 30px Arial";
+        ctx.fillText(`Score: ${score}`, W / 2, 290);
+        ctx.fillText(`Zeit: ${time.toFixed(1)}s`, W / 2, 335);
+        ctx.fillText("Drücke ENTER für Neustart", W / 2, 410);
+      }
+    }
+
+    function render() {
+      const camX = Math.max(
+        0,
+        Math.min(LEVEL_W - W, player.x + player.w / 2 - W / 2)
+      );
+
+      drawBackground(camX);
+      drawWorld(camX);
+      drawPlayer(camX);
+      drawHUD();
+      drawOverlays();
+    }
+
+    let last = performance.now();
+    let accumulator = 0;
+
+    function loop(now) {
+      let dt = (now - last) / 1000;
+      last = now;
+
+      if (dt > 0.1) dt = 0.1;
+
+      accumulator += dt;
+
+      while (accumulator >= STEP) {
+        fixedUpdate();
+        accumulator -= STEP;
+      }
+
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
