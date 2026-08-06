@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Speed Dash Fixed Camera</title>
+  <title>Speed Dash Ultra Final</title>
   <style>
     :root {
       --ctrl-opacity: 0.72;
@@ -180,6 +180,7 @@
 
     const H = 540;
     let VIEW_W = 960;
+    let cameraX = 0;
 
     const isTouch =
       ("ontouchstart" in window) ||
@@ -187,8 +188,6 @@
       window.matchMedia("(pointer: coarse)").matches;
 
     const MOBILE_LIFT = isTouch ? 78 : 0;
-
-    let cameraX = 0;
 
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -285,17 +284,6 @@
     let levelMessage = 0;
     let animT = 0;
     let checkpoint = null;
-    let ringMilestone = 0;
-
-    let pendingWin = 0;
-    let ringStorm = 0;
-
-    let gpLeft = false;
-    let gpRight = false;
-    let gpJumpHeld = false;
-
-    const particles = [];
-    const popups = [];
 
     let shake = 0;
     let combo = 0;
@@ -305,6 +293,18 @@
     let boostMeter = 0;
     let flowHeat = 0;
     let flowMaxed = false;
+    let pendingWin = 0;
+    let ringStorm = 0;
+
+    let gpLeft = false;
+    let gpRight = false;
+    let gpJumpHeld = false;
+
+    let polishLastLevel = -1;
+    let bossWarned = false;
+
+    const particles = [];
+    const popups = [];
 
     const keys = {};
     let jumpPressed = false;
@@ -782,185 +782,6 @@
       }
     }
 
-    function makeLevel1() {
-      const width = 16000;
-
-      const platforms = [{ x: 0, y: 480, w: width, h: 60 }];
-      const rings = [];
-      const loops = [];
-      const boosters = [];
-      const springs = [];
-      const spikes = [];
-      const enemies = [];
-      const checkpoints = [];
-      const hearts = [];
-      const shields = [];
-
-      for (let x = 250; x < width - 500; x += 700) {
-        addRings(rings, x, 430, 6);
-      }
-
-      for (let x = 700; x < width - 500; x += 1600) {
-        platforms.push({ x, y: 350, w: 240, h: 24 });
-        addRings(rings, x + 20, 300, 5);
-      }
-
-      for (let x = 1600; x < width - 2000; x += 3000) {
-        loops.push({ cx: x, cy: 360, r: 120, pathR: 95 });
-      }
-
-      for (let x = 900; x < width - 700; x += 1600) {
-        boosters.push({ x, y: 456, w: 90, h: 24, dir: 1, power: 24 });
-      }
-
-      for (let x = 2100; x < width - 700; x += 2600) {
-        springs.push({ x, y: 456, w: 52, h: 24 });
-      }
-
-      for (let x = 3000; x < width - 800; x += 3000) {
-        spikes.push({ x, y: 456, w: 80, h: 24 });
-      }
-
-      let dir = 1;
-      for (let x = 1800; x < width - 700; x += 2200) {
-        enemies.push({
-          x,
-          y: 446,
-          w: 34,
-          h: 34,
-          dir,
-          minX: x - 200,
-          maxX: x + 200,
-          dead: false
-        });
-        dir *= -1;
-      }
-
-      for (let x = 1400; x < width - 500; x += 2000) {
-        checkpoints.push({ x, y: 380, w: 26, h: 100, active: false });
-      }
-
-      for (let x = 2500; x < width - 500; x += 3600) {
-        hearts.push({ x, y: 310, taken: false });
-      }
-
-      for (let x = 4000; x < width - 500; x += 4600) {
-        shields.push({ x, y: 330, taken: false });
-      }
-
-      return {
-        name: "GREEN DASH ULTRA",
-        width,
-        playerStart: { x: 80, y: 320 },
-        platforms,
-        spikes,
-        springs,
-        boosters,
-        rails: [],
-        loops,
-        rings,
-        enemies,
-        checkpoints,
-        hearts,
-        shields,
-        goal: { x: width - 300, y: 360, w: 40, h: 120 },
-        boss: null,
-        bullets: []
-      };
-    }
-
-    function makeLevel2() {
-      const width = 18000;
-
-      const platforms = [{ x: 0, y: 480, w: width, h: 60 }];
-      const rings = [];
-      const loops = [];
-      const rails = [];
-      const boosters = [];
-      const springs = [];
-      const spikes = [];
-      const enemies = [];
-      const checkpoints = [];
-      const hearts = [];
-      const shields = [];
-
-      for (let x = 250; x < width - 500; x += 700) {
-        addRings(rings, x, 430, 6);
-      }
-
-      let railSpeed = 22;
-      for (let x = 1200; x < width - 2600; x += 2300) {
-        rails.push({ x, y: 380, w: 1100, h: 14, dir: 1, speed: railSpeed });
-        addRings(rings, x + 120, 330, 7, 170);
-
-        railSpeed++;
-        if (railSpeed > 26) railSpeed = 22;
-      }
-
-      for (let x = 2600; x < width - 2200; x += 3800) {
-        loops.push({ cx: x, cy: 360, r: 120, pathR: 95 });
-      }
-
-      for (let x = 800; x < width - 700; x += 2300) {
-        boosters.push({ x, y: 456, w: 90, h: 24, dir: 1, power: 25 });
-      }
-
-      for (let x = 1700; x < width - 700; x += 2700) {
-        springs.push({ x, y: 456, w: 52, h: 24 });
-      }
-
-      for (let x = 3000; x < width - 800; x += 3200) {
-        spikes.push({ x, y: 456, w: 80, h: 24 });
-      }
-
-      let dir = 1;
-      for (let x = 2000; x < width - 700; x += 2300) {
-        enemies.push({
-          x,
-          y: 446,
-          w: 34,
-          h: 34,
-          dir,
-          minX: x - 200,
-          maxX: x + 200,
-          dead: false
-        });
-        dir *= -1;
-      }
-
-      for (let x = 2200; x < width - 500; x += 2300) {
-        checkpoints.push({ x, y: 380, w: 26, h: 100, active: false });
-      }
-
-      for (let x = 2500; x < width - 500; x += 3700) {
-        hearts.push({ x, y: 310, taken: false });
-      }
-
-      for (let x = 4200; x < width - 500; x += 4700) {
-        shields.push({ x, y: 330, taken: false });
-      }
-
-      return {
-        name: "RAIL RUINS TURBO",
-        width,
-        playerStart: { x: 80, y: 320 },
-        platforms,
-        spikes,
-        springs,
-        boosters,
-        rails,
-        loops,
-        rings,
-        enemies,
-        checkpoints,
-        hearts,
-        shields,
-        goal: { x: width - 300, y: 360, w: 40, h: 120 },
-        boss: null,
-        bullets: []
-      };
-    }
-
     function createBoss() {
       return {
         x: 1400,
@@ -979,170 +800,6 @@
         hitFlash: 0,
         shootTimer: 2.8,
         phase2: false
-      };
-    }
-
-    function makeLevel3() {
-      const width = 2400;
-
-      const platforms = [
-        { x: 0, y: 480, w: width, h: 60 },
-        { x: 220, y: 360, w: 240, h: 24 },
-        { x: 880, y: 330, w: 240, h: 24 },
-        { x: 1540, y: 360, w: 240, h: 24 },
-        { x: 2000, y: 330, w: 240, h: 24 }
-      ];
-
-      const rings = [];
-      addRings(rings, 250, 430, 7);
-      addRings(rings, 700, 430, 7);
-      addRings(rings, 1150, 430, 7);
-      addRings(rings, 1600, 430, 7);
-      addRings(rings, 2050, 430, 6);
-      addRings(rings, 260, 320, 4);
-      addRings(rings, 920, 290, 4);
-      addRings(rings, 1580, 320, 4);
-      addRings(rings, 2040, 290, 4);
-
-      const hearts = [
-        { x: 400, y: 430, taken: false },
-        { x: 1200, y: 430, taken: false },
-        { x: 1700, y: 430, taken: false },
-        { x: 2200, y: 430, taken: false }
-      ];
-
-      const shields = [
-        { x: 800, y: 420, taken: false },
-        { x: 1450, y: 420, taken: false },
-        { x: 2100, y: 420, taken: false }
-      ];
-
-      const checkpoints = [
-        { x: 200, y: 380, w: 26, h: 100, active: false }
-      ];
-
-      const boosters = [
-        { x: 300, y: 456, w: 90, h: 24, dir: 1, power: 20 },
-        { x: 1500, y: 456, w: 90, h: 24, dir: -1, power: 20 },
-        { x: 2100, y: 456, w: 90, h: 24, dir: -1, power: 20 }
-      ];
-
-      return {
-        name: "BOSS CORE",
-        width,
-        playerStart: { x: 100, y: 320 },
-        platforms,
-        spikes: [],
-        springs: [],
-        boosters,
-        rails: [],
-        loops: [],
-        rings,
-        enemies: [],
-        checkpoints,
-        hearts,
-        shields,
-        goal: null,
-        boss: createBoss(),
-        bullets: []
-      };
-    }
-
-    function makeLevel4() {
-      const width = 22000;
-
-      const platforms = [{ x: 0, y: 480, w: width, h: 60 }];
-      const rings = [];
-      const loops = [];
-      const rails = [];
-      const boosters = [];
-      const springs = [];
-      const spikes = [];
-      const enemies = [];
-      const checkpoints = [];
-      const hearts = [];
-      const shields = [];
-
-      for (let x = 250; x < width - 500; x += 650) {
-        addRings(rings, x, 430, 6);
-      }
-
-      for (let x = 1000; x < width - 500; x += 1800) {
-        platforms.push({ x, y: 350, w: 240, h: 24 });
-        addRings(rings, x + 20, 300, 5);
-      }
-
-      for (let x = 1500; x < width - 2000; x += 2600) {
-        loops.push({ cx: x, cy: 360, r: 120, pathR: 95 });
-      }
-
-      let railSpeed = 24;
-      for (let x = 2200; x < width - 2600; x += 3000) {
-        rails.push({ x, y: 370, w: 1200, h: 14, dir: 1, speed: railSpeed });
-        addRings(rings, x + 140, 320, 7, 180);
-
-        railSpeed++;
-        if (railSpeed > 27) railSpeed = 24;
-      }
-
-      for (let x = 800; x < width - 700; x += 1300) {
-        const power = 26 + (Math.floor(x / 1300) % 3);
-        boosters.push({ x, y: 456, w: 90, h: 24, dir: 1, power });
-      }
-
-      for (let x = 2500; x < width - 700; x += 2800) {
-        springs.push({ x, y: 456, w: 52, h: 24 });
-      }
-
-      for (let x = 3100; x < width - 800; x += 3400) {
-        spikes.push({ x, y: 456, w: 80, h: 24 });
-      }
-
-      let dir = 1;
-      for (let x = 2100; x < width - 700; x += 2400) {
-        enemies.push({
-          x,
-          y: 446,
-          w: 34,
-          h: 34,
-          dir,
-          minX: x - 220,
-          maxX: x + 220,
-          dead: false
-        });
-        dir *= -1;
-      }
-
-      for (let x = 1600; x < width - 500; x += 1800) {
-        checkpoints.push({ x, y: 380, w: 26, h: 100, active: false });
-      }
-
-      for (let x = 3000; x < width - 500; x += 3200) {
-        hearts.push({ x, y: 310, taken: false });
-      }
-
-      for (let x = 5000; x < width - 500; x += 5200) {
-        shields.push({ x, y: 330, taken: false });
-      }
-
-      return {
-        name: "NEON FLOW INFINITE X",
-        width,
-        playerStart: { x: 80, y: 320 },
-        platforms,
-        spikes,
-        springs,
-        boosters,
-        rails,
-        loops,
-        rings,
-        enemies,
-        checkpoints,
-        hearts,
-        shields,
-        goal: { x: width - 300, y: 360, w: 40, h: 120 },
-        boss: null,
-        bullets: []
       };
     }
 
@@ -1168,13 +825,266 @@
       }
     }
 
-    function buildLevel(index) {
-      let lvl;
+    function makeLevel(index) {
+      let width = 10000;
+      let name = "LEVEL";
 
-      if (index === 0) lvl = makeLevel1();
-      else if (index === 1) lvl = makeLevel2();
-      else if (index === 2) lvl = makeLevel3();
-      else lvl = makeLevel4();
+      const platforms = [];
+      const rings = [];
+      const loops = [];
+      const rails = [];
+      const boosters = [];
+      const springs = [];
+      const spikes = [];
+      const enemies = [];
+      const checkpoints = [];
+      const hearts = [];
+      const shields = [];
+
+      let boss = null;
+
+      if (index === 0) {
+        width = 16000;
+        name = "GREEN DASH ULTRA";
+
+        platforms.push({ x: 0, y: 480, w: width, h: 60 });
+
+        for (let x = 250; x < width - 500; x += 700) {
+          addRings(rings, x, 430, 6);
+        }
+
+        for (let x = 700; x < width - 500; x += 1600) {
+          platforms.push({ x, y: 350, w: 240, h: 24 });
+          addRings(rings, x + 20, 300, 5);
+        }
+
+        for (let x = 1600; x < width - 2000; x += 3000) {
+          loops.push({ cx: x, cy: 360, r: 120, pathR: 95 });
+        }
+
+        for (let x = 900; x < width - 700; x += 1600) {
+          boosters.push({ x, y: 456, w: 90, h: 24, dir: 1, power: 24 });
+        }
+
+        for (let x = 2100; x < width - 700; x += 2600) {
+          springs.push({ x, y: 456, w: 52, h: 24 });
+        }
+
+        for (let x = 3000; x < width - 800; x += 3000) {
+          spikes.push({ x, y: 456, w: 80, h: 24 });
+        }
+
+        let dir = 1;
+        for (let x = 1800; x < width - 700; x += 2200) {
+          enemies.push({
+            x,
+            y: 446,
+            w: 34,
+            h: 34,
+            dir,
+            minX: x - 200,
+            maxX: x + 200,
+            dead: false
+          });
+          dir *= -1;
+        }
+
+        for (let x = 1400; x < width - 500; x += 2000) {
+          checkpoints.push({ x, y: 380, w: 26, h: 100, active: false });
+        }
+
+        for (let x = 2500; x < width - 500; x += 3600) {
+          hearts.push({ x, y: 310, taken: false });
+        }
+
+        for (let x = 4000; x < width - 500; x += 4600) {
+          shields.push({ x, y: 330, taken: false });
+        }
+      } else if (index === 1) {
+        width = 18000;
+        name = "RAIL RUINS TURBO";
+
+        platforms.push({ x: 0, y: 480, w: width, h: 60 });
+
+        for (let x = 250; x < width - 500; x += 700) {
+          addRings(rings, x, 430, 6);
+        }
+
+        let railSpeed = 22;
+        for (let x = 1200; x < width - 2600; x += 2300) {
+          rails.push({ x, y: 380, w: 1100, h: 14, dir: 1, speed: railSpeed });
+          addRings(rings, x + 120, 330, 7, 170);
+
+          railSpeed++;
+          if (railSpeed > 26) railSpeed = 22;
+        }
+
+        for (let x = 2600; x < width - 2200; x += 3800) {
+          loops.push({ cx: x, cy: 360, r: 120, pathR: 95 });
+        }
+
+        for (let x = 800; x < width - 700; x += 2300) {
+          boosters.push({ x, y: 456, w: 90, h: 24, dir: 1, power: 25 });
+        }
+
+        for (let x = 1700; x < width - 700; x += 2700) {
+          springs.push({ x, y: 456, w: 52, h: 24 });
+        }
+
+        for (let x = 3000; x < width - 800; x += 3200) {
+          spikes.push({ x, y: 456, w: 80, h: 24 });
+        }
+
+        let dir = 1;
+        for (let x = 2000; x < width - 700; x += 2300) {
+          enemies.push({
+            x,
+            y: 446,
+            w: 34,
+            h: 34,
+            dir,
+            minX: x - 200,
+            maxX: x + 200,
+            dead: false
+          });
+          dir *= -1;
+        }
+
+        for (let x = 2200; x < width - 500; x += 2300) {
+          checkpoints.push({ x, y: 380, w: 26, h: 100, active: false });
+        }
+
+        for (let x = 2500; x < width - 500; x += 3700) {
+          hearts.push({ x, y: 310, taken: false });
+        }
+
+        for (let x = 4200; x < width - 500; x += 4700) {
+          shields.push({ x, y: 330, taken: false });
+        }
+      } else if (index === 2) {
+        width = 2400;
+        name = "BOSS CORE";
+
+        platforms.push({ x: 0, y: 480, w: width, h: 60 });
+        platforms.push({ x: 220, y: 360, w: 240, h: 24 });
+        platforms.push({ x: 880, y: 330, w: 240, h: 24 });
+        platforms.push({ x: 1540, y: 360, w: 240, h: 24 });
+        platforms.push({ x: 2000, y: 330, w: 240, h: 24 });
+
+        addRings(rings, 250, 430, 7);
+        addRings(rings, 700, 430, 7);
+        addRings(rings, 1150, 430, 7);
+        addRings(rings, 1600, 430, 7);
+        addRings(rings, 2050, 430, 6);
+        addRings(rings, 260, 320, 4);
+        addRings(rings, 920, 290, 4);
+        addRings(rings, 1580, 320, 4);
+        addRings(rings, 2040, 290, 4);
+
+        hearts.push({ x: 400, y: 430, taken: false });
+        hearts.push({ x: 1200, y: 430, taken: false });
+        hearts.push({ x: 1700, y: 430, taken: false });
+        hearts.push({ x: 2200, y: 430, taken: false });
+
+        shields.push({ x: 800, y: 420, taken: false });
+        shields.push({ x: 1450, y: 420, taken: false });
+        shields.push({ x: 2100, y: 420, taken: false });
+
+        checkpoints.push({ x: 200, y: 380, w: 26, h: 100, active: false });
+
+        boosters.push({ x: 300, y: 456, w: 90, h: 24, dir: 1, power: 20 });
+        boosters.push({ x: 1500, y: 456, w: 90, h: 24, dir: -1, power: 20 });
+        boosters.push({ x: 2100, y: 456, w: 90, h: 24, dir: -1, power: 20 });
+
+        boss = createBoss();
+      } else {
+        width = 22000;
+        name = "NEON FLOW INFINITE X";
+
+        platforms.push({ x: 0, y: 480, w: width, h: 60 });
+
+        for (let x = 250; x < width - 500; x += 650) {
+          addRings(rings, x, 430, 6);
+        }
+
+        for (let x = 1000; x < width - 500; x += 1800) {
+          platforms.push({ x, y: 350, w: 240, h: 24 });
+          addRings(rings, x + 20, 300, 5);
+        }
+
+        for (let x = 1500; x < width - 2000; x += 2600) {
+          loops.push({ cx: x, cy: 360, r: 120, pathR: 95 });
+        }
+
+        let railSpeed = 24;
+        for (let x = 2200; x < width - 2600; x += 3000) {
+          rails.push({ x, y: 370, w: 1200, h: 14, dir: 1, speed: railSpeed });
+          addRings(rings, x + 140, 320, 7, 180);
+
+          railSpeed++;
+          if (railSpeed > 27) railSpeed = 24;
+        }
+
+        for (let x = 800; x < width - 700; x += 1300) {
+          const power = 26 + (Math.floor(x / 1300) % 3);
+          boosters.push({ x, y: 456, w: 90, h: 24, dir: 1, power });
+        }
+
+        for (let x = 2500; x < width - 700; x += 2800) {
+          springs.push({ x, y: 456, w: 52, h: 24 });
+        }
+
+        for (let x = 3100; x < width - 800; x += 3400) {
+          spikes.push({ x, y: 456, w: 80, h: 24 });
+        }
+
+        let dir = 1;
+        for (let x = 2100; x < width - 700; x += 2400) {
+          enemies.push({
+            x,
+            y: 446,
+            w: 34,
+            h: 34,
+            dir,
+            minX: x - 220,
+            maxX: x + 220,
+            dead: false
+          });
+          dir *= -1;
+        }
+
+        for (let x = 1600; x < width - 500; x += 1800) {
+          checkpoints.push({ x, y: 380, w: 26, h: 100, active: false });
+        }
+
+        for (let x = 3000; x < width - 500; x += 3200) {
+          hearts.push({ x, y: 310, taken: false });
+        }
+
+        for (let x = 5000; x < width - 500; x += 5200) {
+          shields.push({ x, y: 330, taken: false });
+        }
+      }
+
+      const lvl = {
+        name,
+        width,
+        playerStart: { x: 80, y: 320 },
+        platforms,
+        spikes,
+        springs,
+        boosters,
+        rails,
+        loops,
+        rings,
+        enemies,
+        checkpoints,
+        hearts,
+        shields,
+        goal: index === 2 ? null : { x: width - 300, y: 360, w: 40, h: 120 },
+        boss,
+        bullets: []
+      };
 
       if (isTouch && MOBILE_LIFT !== 0) {
         shiftLevelForMobile(lvl, -MOBILE_LIFT);
@@ -1184,12 +1094,12 @@
     }
 
     function loadLevel(index) {
-      level = buildLevel(index);
+      level = makeLevel(index);
       currentLevel = index;
+
       time = 0;
       rings = START_RINGS;
       levelMessage = 2.2;
-      ringMilestone = START_RINGS;
 
       particles.length = 0;
       popups.length = 0;
@@ -1203,9 +1113,11 @@
       boostMeter = 0;
       flowHeat = 0;
       flowMaxed = false;
-
       pendingWin = 0;
       ringStorm = 0;
+
+      polishLastLevel = index;
+      bossWarned = false;
 
       let startX = level.playerStart.x;
       let startY = level.playerStart.y;
@@ -1747,12 +1659,6 @@
           sfxRing();
           spawnParticles(r.x, r.y, "#ffd54f", 8, 3);
 
-          if (rings >= ringMilestone + 20) {
-            ringMilestone += 20;
-            score += 50;
-            addPopup(player.x + player.w / 2, player.y - 36, `RING ${rings}!`, "#ffd54f");
-          }
-
           if (rings % 50 === 0) {
             ringStorm = 4.0;
             sfxRingStorm();
@@ -2249,6 +2155,8 @@
 
     function fixedUpdate() {
       if (gameState !== "play") {
+        updateParticles();
+        updatePopups();
         jumpPressed = false;
         return;
       }
@@ -2267,6 +2175,12 @@
         jumpPressed = false;
         return;
       }
+
+      const prevState = gameState;
+
+      const wasGround = player.onGround;
+      const prevVy = player.vy;
+      const prevDouble = player.doubleUsed;
 
       time += STEP;
 
@@ -2301,9 +2215,6 @@
         }
       }
 
-      const wasOnGround = player.onGround;
-      const impactVy = player.vy;
-
       if (player.loop) {
         updateLoop();
       } else if (player.rail) {
@@ -2316,9 +2227,18 @@
         checkLoops();
       }
 
-      if (!wasOnGround && player.onGround && impactVy > 11) {
+      if (!wasGround && player.onGround && prevVy > 11) {
         shake = Math.max(shake, 0.12);
         spawnParticles(player.x + player.w / 2, player.y + player.h, "#eceff1", 8, 2);
+      }
+
+      if (wasGround && !player.onGround && player.vy < -5) {
+        spawnParticles(player.x + player.w / 2, player.y + player.h, "#d7ccc8", 8, 2);
+      }
+
+      if (!prevDouble && player.doubleUsed) {
+        spawnParticles(player.x + player.w / 2, player.y + player.h / 2, "#b3e5fc", 16, 5);
+        addPopup(player.x + player.w / 2, player.y - 36, "DOUBLE JUMP", "#b3e5fc");
       }
 
       if (player.rail && Math.random() < 0.40) {
@@ -2384,6 +2304,12 @@
         );
       }
 
+      if (level.boss && !bossWarned && time < 0.25) {
+        bossWarned = true;
+        addPopup(player.x + player.w / 2, player.y - 48, "BOSS AHEAD", "#ff5252");
+        flash = Math.max(flash, 0.06);
+      }
+
       if (level.boss && level.boss.phase2 && level.boss.health > 0 && Math.random() < 0.16) {
         spawnParticles(
           level.boss.x + level.boss.w / 2 + Math.random() * 60 - 30,
@@ -2422,6 +2348,24 @@
 
         if (pendingWin <= 0) {
           gameState = "win";
+        }
+      }
+
+      if (prevState === "play" && gameState === "levelClear") {
+        if (flowHeat > 0.8) {
+          addPopup(player.x + player.w / 2, player.y - 64, "FLOW BONUS!", "#ff00ff");
+        }
+
+        const colors = ["#ffd54f", "#ff80ab", "#80d8ff", "#b9f6ca"];
+
+        for (let i = 0; i < 16; i++) {
+          spawnParticles(
+            player.x + player.w / 2 + (Math.random() * 300 - 150),
+            player.y + (Math.random() * 160 - 80),
+            colors[i % colors.length],
+            4,
+            4
+          );
         }
       }
 
@@ -2593,6 +2537,25 @@
         ctx.arc(x, y, size, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      if (currentLevel === 0 || currentLevel === 3) {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+
+        for (let i = 0; i < 18; i++) {
+          const x = mod(i * 250 + animT * 30 - camX * 0.2, VIEW_W);
+          const y = mod(i * 120 + Math.sin(animT * 2 + i) * 30, H);
+          const a = 0.04 + 0.04 * Math.sin(animT * 4 + i);
+
+          ctx.fillStyle = `rgba(255,255,255,${Math.max(0.01, a)})`;
+
+          ctx.beginPath();
+          ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
     }
 
     function drawLightLeaks(camX) {
@@ -2653,20 +2616,6 @@
         }
 
         ctx.restore();
-      }
-
-      if (currentLevel === 0) {
-        for (let i = 0; i < 25; i++) {
-          const x = mod(i * 190 + animT * 22 - camX * 0.22, VIEW_W);
-          const y = mod(i * 83 + Math.sin(animT + i) * 24, H);
-          const a = 0.03 + 0.03 * Math.sin(animT * 2 + i);
-
-          ctx.fillStyle = `rgba(255,255,255,${Math.max(0.01, a)})`;
-
-          ctx.beginPath();
-          ctx.arc(x, y, 1 + (i % 2), 0, Math.PI * 2);
-          ctx.fill();
-        }
       }
 
       if (currentLevel === 1) {
@@ -3775,6 +3724,25 @@
 
         ctx.restore();
       }
+
+      if (gameState === "play" && player.invuln > 0.2) {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+
+        for (let i = 0; i < 6; i++) {
+          const a = animT * 6 + i * 1.05;
+          const x = cx + Math.cos(a) * 30;
+          const y = cy + Math.sin(a) * 18;
+
+          ctx.fillStyle = "rgba(255,255,255,0.45)";
+
+          ctx.beginPath();
+          ctx.arc(x, y, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
     }
 
     function drawHUD() {
@@ -3956,8 +3924,8 @@
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fillRect(0, 0, VIEW_W, H);
 
-        drawCenterText("SPEED DASH FIXED CAMERA", 140, Math.min(56, VIEW_W / 10));
-        drawCenterText("Turbo Feel • Long Levels • Safe Camera", 190, Math.min(26, VIEW_W / 26));
+        drawCenterText("SPEED DASH ULTRA FINAL", 140, Math.min(56, VIEW_W / 10));
+        drawCenterText("Turbo • Flow • Polish • Boss • Long Levels", 190, Math.min(26, VIEW_W / 26));
 
         ctx.font = `${Math.min(22, VIEW_W / 30)}px Arial`;
         ctx.fillStyle = "#ffffff";
@@ -4146,6 +4114,47 @@
           Math.min(30, VIEW_W / 22),
           "#ffeb3b"
         );
+      }
+
+      if (gameState === "play") {
+        if (flowHeat > 0.9) {
+          ctx.save();
+
+          ctx.globalAlpha = 0.55 + 0.2 * Math.sin(animT * 8);
+          ctx.font = "bold 14px Arial";
+          ctx.textAlign = "center";
+          ctx.fillStyle = "#ffffff";
+
+          ctx.fillText("FLOW S", VIEW_W / 2, 76);
+
+          ctx.restore();
+        }
+
+        if (player.autoBoost > 0) {
+          ctx.save();
+
+          ctx.globalAlpha = 0.5;
+          ctx.font = "bold 14px Arial";
+          ctx.textAlign = "right";
+          ctx.fillStyle = "#80d8ff";
+
+          ctx.fillText("BOOST", VIEW_W - 20, 90);
+
+          ctx.restore();
+        }
+
+        if (ringStorm > 0) {
+          ctx.save();
+
+          ctx.globalAlpha = 0.55 + 0.2 * Math.sin(animT * 10);
+          ctx.font = "bold 14px Arial";
+          ctx.textAlign = "left";
+          ctx.fillStyle = "#80d8ff";
+
+          ctx.fillText("RING STORM", 20, 90);
+
+          ctx.restore();
+        }
       }
 
       drawOverlays();
