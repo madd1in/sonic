@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Speed Dash Faster Longer</title>
+  <title>Speed Dash Fixed Camera</title>
   <style>
     :root {
       --ctrl-opacity: 0.72;
@@ -188,6 +188,8 @@
 
     const MOBILE_LIFT = isTouch ? 78 : 0;
 
+    let cameraX = 0;
+
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const aspect = window.innerWidth / Math.max(1, window.innerHeight);
@@ -268,7 +270,7 @@
 
     const ACCEL = 1.05;
     const AIR_ACCEL = 0.62;
-    const MAX_BASE = 16.0;
+    const MAX_BASE = 15.2;
 
     const INVULN_TIME = 3.5;
     const BOSS_BULLET_SPEED = 3.4;
@@ -1229,6 +1231,15 @@
       player.rail = null;
       player.shield = false;
       player.squash = 0;
+
+      if (level.width >= VIEW_W) {
+        cameraX = Math.max(
+          0,
+          Math.min(level.width - VIEW_W, player.x + player.w / 2 - VIEW_W / 2)
+        );
+      } else {
+        cameraX = (level.width - VIEW_W) / 2;
+      }
     }
 
     function handleMenuButton() {
@@ -1518,27 +1529,27 @@
       }
 
       const boostActive = player.autoBoost > 0;
-      const flowMult = 1 + flowHeat * 0.45;
+      const flowMult = 1 + flowHeat * 0.42;
 
       const maxSpeed =
-        boostActive ? (26 + flowHeat * 8) :
-        player.rolling ? (20 * flowMult) :
+        boostActive ? (25 + flowHeat * 7) :
+        player.rolling ? (19 * flowMult) :
         (MAX_BASE * flowMult);
 
       if (left && !right) {
-        player.vx -= player.onGround ? (boostActive ? 1.25 : ACCEL) : AIR_ACCEL;
+        player.vx -= player.onGround ? (boostActive ? 1.22 : ACCEL) : AIR_ACCEL;
         player.facing = -1;
       }
 
       if (right && !left) {
-        player.vx += player.onGround ? (boostActive ? 1.25 : ACCEL) : AIR_ACCEL;
+        player.vx += player.onGround ? (boostActive ? 1.22 : ACCEL) : AIR_ACCEL;
         player.facing = 1;
       }
 
       if ((!left && !right) || (left && right)) {
         const friction =
           player.onGround ?
-            (boostActive || player.rolling || flowHeat > 0.7 ? 0.999 : 0.975) :
+            (boostActive || player.rolling || flowHeat > 0.7 ? 0.999 : 0.976) :
             0.995;
 
         player.vx *= friction;
@@ -2526,6 +2537,22 @@
         ctx.arc(x, H + 160, 190, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      const horizonY = H - 70;
+      const hg = ctx.createLinearGradient(0, horizonY - 30, 0, horizonY + 40);
+
+      if (currentLevel === 3) {
+        hg.addColorStop(0, "rgba(0,255,255,0)");
+        hg.addColorStop(0.5, "rgba(0,255,255,0.06)");
+        hg.addColorStop(1, "rgba(0,255,255,0)");
+      } else {
+        hg.addColorStop(0, "rgba(255,255,255,0)");
+        hg.addColorStop(0.5, "rgba(255,255,255,0.05)");
+        hg.addColorStop(1, "rgba(255,255,255,0)");
+      }
+
+      ctx.fillStyle = hg;
+      ctx.fillRect(0, horizonY - 30, VIEW_W, 70);
 
       if (gameState === "play") {
         const speed = Math.abs(player.vx);
@@ -3929,8 +3956,8 @@
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fillRect(0, 0, VIEW_W, H);
 
-        drawCenterText("SPEED DASH FASTER LONGER", 140, Math.min(56, VIEW_W / 10));
-        drawCenterText("Turbo Feel • Long Levels • More Polish", 190, Math.min(26, VIEW_W / 26));
+        drawCenterText("SPEED DASH FIXED CAMERA", 140, Math.min(56, VIEW_W / 10));
+        drawCenterText("Turbo Feel • Long Levels • Safe Camera", 190, Math.min(26, VIEW_W / 26));
 
         ctx.font = `${Math.min(22, VIEW_W / 30)}px Arial`;
         ctx.fillStyle = "#ffffff";
@@ -3996,19 +4023,41 @@
     }
 
     function render() {
-      let camX = 0;
+      let targetCam = 0;
 
       if (level) {
-        const lookahead = player.vx * 16;
+        const lookahead = Math.max(
+          -VIEW_W * 0.22,
+          Math.min(VIEW_W * 0.22, player.vx * 8)
+        );
 
-        camX = player.x + player.w / 2 + lookahead - VIEW_W / 2;
+        targetCam = player.x + player.w / 2 + lookahead - VIEW_W / 2;
 
         if (level.width >= VIEW_W) {
-          camX = Math.max(0, Math.min(level.width - VIEW_W, camX));
+          targetCam = Math.max(0, Math.min(level.width - VIEW_W, targetCam));
         } else {
-          camX = (level.width - VIEW_W) / 2;
+          targetCam = (level.width - VIEW_W) / 2;
+        }
+
+        const screenX = player.x + player.w / 2 - targetCam;
+        const margin = Math.min(110, VIEW_W * 0.18);
+
+        if (screenX < margin) {
+          targetCam = player.x + player.w / 2 - margin;
+        }
+
+        if (screenX > VIEW_W - margin) {
+          targetCam = player.x + player.w / 2 - (VIEW_W - margin);
+        }
+
+        if (level.width >= VIEW_W) {
+          targetCam = Math.max(0, Math.min(level.width - VIEW_W, targetCam));
         }
       }
+
+      cameraX += (targetCam - cameraX) * 0.18;
+
+      const camX = cameraX;
 
       drawBackground(camX);
       drawAmbient(camX);
@@ -4019,11 +4068,11 @@
       const speedZoom =
         gameState === "play"
           ? 1 + Math.min(
-              0.095,
-              speed * 0.0035 +
-              flowHeat * 0.025 +
-              (player.autoBoost > 0 ? 0.025 : 0) +
-              (ringStorm > 0 ? 0.012 : 0)
+              0.06,
+              speed * 0.002 +
+              flowHeat * 0.015 +
+              (player.autoBoost > 0 ? 0.015 : 0) +
+              (ringStorm > 0 ? 0.008 : 0)
             )
           : 1;
 
@@ -4040,11 +4089,6 @@
 
       ctx.translate(VIEW_W / 2, H / 2);
       ctx.scale(speedZoom, speedZoom);
-
-      if (gameState === "play" && flowHeat > 0.94) {
-        ctx.rotate(Math.sin(animT * 3.2) * 0.004);
-      }
-
       ctx.translate(-VIEW_W / 2, -H / 2);
 
       if (level) {
