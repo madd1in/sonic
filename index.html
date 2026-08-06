@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Speed Dash Polish Ultimate</title>
+  <title>Speed Dash Ultimate Rollercoaster</title>
   <style>
     :root {
       --ctrl-opacity: 0.72;
@@ -307,6 +307,7 @@
     let controlsIdle = 0;
     let controlsFaded = false;
     let hurtFlash = 0;
+    let bossWarned = false;
 
     let gpLeft = false;
     let gpRight = false;
@@ -782,12 +783,6 @@
       playSynth(84, 0.12, "square", 0.12, 10, 0.05);
     }
 
-    function addRings(arr, x, y, n = 1, dx = 38) {
-      for (let i = 0; i < n; i++) {
-        arr.push({ x: x + i * dx, y, taken: false });
-      }
-    }
-
     function createBoss() {
       return {
         x: 1400,
@@ -809,44 +804,26 @@
       };
     }
 
-    function shiftLevelForMobile(lvl, dy) {
-      lvl.playerStart.y += dy;
-
-      if (lvl.minY !== undefined) lvl.minY += dy;
-      if (lvl.bottom !== undefined) lvl.bottom += dy;
-
-      if (lvl.platforms) lvl.platforms.forEach((p) => (p.y += dy));
-      if (lvl.spikes) lvl.spikes.forEach((s) => (s.y += dy));
-      if (lvl.springs) lvl.springs.forEach((s) => (s.y += dy));
-      if (lvl.boosters) lvl.boosters.forEach((b) => (b.y += dy));
-      if (lvl.rails) lvl.rails.forEach((r) => (r.y += dy));
-      if (lvl.loops) lvl.loops.forEach((l) => (l.cy += dy));
-      if (lvl.rings) lvl.rings.forEach((r) => (r.y += dy));
-      if (lvl.enemies) lvl.enemies.forEach((e) => (e.y += dy));
-      if (lvl.checkpoints) lvl.checkpoints.forEach((c) => (c.y += dy));
-      if (lvl.hearts) lvl.hearts.forEach((h) => (h.y += dy));
-      if (lvl.shields) lvl.shields.forEach((s) => (s.y += dy));
-      if (lvl.goal) lvl.goal.y += dy;
-
-      if (lvl.corkscrews) {
-        lvl.corkscrews.forEach((c) => {
-          c.y += dy;
-        });
-      }
-
-      if (lvl.boss) {
-        lvl.boss.y += dy;
-        lvl.boss.baseY += dy;
-      }
-    }
-
     function makeLevel(index) {
-      let width = 10000;
-      let name = "LEVEL";
-      let minY = -1400;
-      let bottom = 540;
+      const configs = [
+        { name: "GREEN COASTER FLOW", width: 16000, intensity: 1, boss: false },
+        { name: "RAIL SKY COASTER", width: 18000, intensity: 2, boss: false },
+        { name: "BOSS COASTER", width: 2600, intensity: 2, boss: true }
+      ];
 
-      const platforms = [];
+      const cfg = configs[index] || configs[0];
+
+      let seed = 1000 + index * 777;
+
+      function rnd() {
+        seed = (seed * 9301 + 49297) % 233280;
+        return seed / 233280;
+      }
+
+      const platforms = [
+        { x: 0, y: 480, w: cfg.width, h: 60 }
+      ];
+
       const rings = [];
       const loops = [];
       const rails = [];
@@ -859,9 +836,52 @@
       const shields = [];
       const corkscrews = [];
 
-      let boss = null;
+      function addRings(x, y, n = 1, dx = 38) {
+        for (let i = 0; i < n; i++) {
+          rings.push({ x: x + i * dx, y, taken: false });
+        }
+      }
 
-      function addCorkscrew(x, len, turns, r = 90, dir = 1) {
+      function addBoosterChain(x, count, power) {
+        for (let i = 0; i < count; i++) {
+          boosters.push({
+            x: x + i * 180,
+            y: 456,
+            w: 90,
+            h: 24,
+            dir: 1,
+            power
+          });
+        }
+
+        addRings(x + 20, 430, count + 2);
+      }
+
+      function addLoopChain(x, count) {
+        for (let i = 0; i < count; i++) {
+          const cx = x + i * 420;
+
+          boosters.push({
+            x: cx - 260,
+            y: 456,
+            w: 90,
+            h: 24,
+            dir: 1,
+            power: 22
+          });
+
+          loops.push({
+            cx,
+            cy: 360,
+            r: 120,
+            pathR: 95
+          });
+
+          addRings(cx - 160, 430, 4);
+        }
+      }
+
+      function addCorkscrew(x, len, turns, r, dir, addTop = true) {
         const startY = 480;
         const topY = startY - len;
         const endX = x + dir * len;
@@ -875,92 +895,98 @@
           dir
         });
 
-        platforms.push({
-          x: endX - (dir === 1 ? 260 : 640),
-          y: topY,
-          w: 900,
-          h: 24
-        });
+        if (addTop) {
+          platforms.push({
+            x: endX - (dir === 1 ? 260 : 640),
+            y: topY,
+            w: 900,
+            h: 24
+          });
+        }
 
         addRings(
-          rings,
           endX - (dir === 1 ? 200 : -200),
           topY - 50,
           8,
           dir * 120
         );
+
+        return { endX, topY };
       }
 
-      if (index === 0) {
-        width = 12000;
-        name = "GREEN CORKSCREW";
-        minY = -1600;
+      function addRailGlide(x, y, len, speed) {
+        rails.push({
+          x,
+          y,
+          w: len,
+          h: 14,
+          dir: 1,
+          speed
+        });
 
-        platforms.push({ x: 0, y: 480, w: width, h: 60 });
+        addRings(x + 80, y - 40, Math.floor(len / 160), 160);
+      }
 
-        for (let x = 250; x < width - 500; x += 700) {
-          addRings(rings, x, 430, 6);
-        }
+      function addHillHop(x) {
+        springs.push({
+          x,
+          y: 456,
+          w: 52,
+          h: 24
+        });
 
-        for (let x = 700; x < width - 500; x += 1600) {
-          platforms.push({ x, y: 350, w: 240, h: 24 });
-          addRings(rings, x + 20, 300, 5);
-        }
+        platforms.push(
+          { x: x + 160, y: 360, w: 220, h: 24 },
+          { x: x + 380, y: 280, w: 220, h: 24 },
+          { x: x + 600, y: 360, w: 220, h: 24 }
+        );
 
-        for (let x = 2600; x < width - 2000; x += 3000) {
-          loops.push({ cx: x, cy: 360, r: 120, pathR: 95 });
-        }
+        addRings(x + 180, 320, 4);
+        addRings(x + 400, 240, 4);
+        addRings(x + 620, 320, 4);
+      }
 
-        for (let x = 900; x < width - 700; x += 1400) {
-          boosters.push({ x, y: 456, w: 90, h: 24, dir: 1, power: 24 });
-        }
+      if (cfg.boss) {
+        platforms.push(
+          { x: 220, y: 360, w: 240, h: 24 },
+          { x: 880, y: 330, w: 240, h: 24 },
+          { x: 1540, y: 360, w: 240, h: 24 }
+        );
 
-        for (let x = 2100; x < width - 700; x += 2600) {
-          springs.push({ x, y: 456, w: 52, h: 24 });
-        }
+        addBoosterChain(300, 3, 20);
+        addCorkscrew(1700, 420, 2, 80, 1, true);
 
-        for (let x = 3000; x < width - 800; x += 3000) {
-          spikes.push({ x, y: 456, w: 80, h: 24 });
-        }
+        addRings(250, 430, 7);
+        addRings(700, 430, 7);
+        addRings(1150, 430, 7);
+        addRings(1600, 430, 7);
 
-        let dir = 1;
-        for (let x = 1800; x < width - 700; x += 2200) {
-          enemies.push({
-            x,
-            y: 446,
-            w: 34,
-            h: 34,
-            dir,
-            minX: x - 200,
-            maxX: x + 200,
-            dead: false
-          });
-          dir *= -1;
-        }
+        hearts.push(
+          { x: 400, y: 430, taken: false },
+          { x: 1200, y: 430, taken: false },
+          { x: 1700, y: 430, taken: false }
+        );
 
-        for (let x = 1400; x < width - 500; x += 2000) {
-          checkpoints.push({ x, y: 380, w: 26, h: 100, active: false });
-        }
+        shields.push(
+          { x: 800, y: 420, taken: false },
+          { x: 1450, y: 420, taken: false },
+          { x: 2100, y: 420, taken: false }
+        );
 
-        for (let x = 2500; x < width - 500; x += 3600) {
-          hearts.push({ x, y: 310, taken: false });
-        }
-
-        for (let x = 4000; x < width - 500; x += 4600) {
-          shields.push({ x, y: 330, taken: false });
-        }
-
-        addCorkscrew(1600, 500, 2, 90, 1);
-        addCorkscrew(4200, 700, 3, 95, 1);
-        addCorkscrew(7000, 900, 3, 100, 1);
-        addCorkscrew(9500, 650, 3, 95, 1);
+        checkpoints.push({
+          x: 200,
+          y: 380,
+          w: 26,
+          h: 100,
+          active: false
+        });
 
         return {
-          name,
-          width,
-          minY,
-          bottom,
-          playerStart: { x: 80, y: 320 },
+          name: cfg.name,
+          width: cfg.width,
+          minY: -1200,
+          bottom: 540,
+          playerStart: { x: 100, y: 320 },
           platforms,
           spikes,
           springs,
@@ -973,174 +999,150 @@
           hearts,
           shields,
           corkscrews,
-          goal: { x: width - 300, y: 360, w: 40, h: 120 },
-          boss: null,
+          goal: null,
+          boss: createBoss(),
           bullets: []
         };
       }
 
-      if (index === 1) {
-        width = 14000;
-        name = "RAIL CORKSCREW";
-        minY = -1900;
+      let x = 600;
 
-        platforms.push({ x: 0, y: 480, w: width, h: 60 });
+      addBoosterChain(x, 4, 22);
+      x += 750;
 
-        for (let x = 250; x < width - 500; x += 700) {
-          addRings(rings, x, 430, 6);
-        }
+      let nextCheckpoint = 1800;
+      let segment = 0;
 
-        let railSpeed = 22;
-        for (let x = 1200; x < width - 2600; x += 2300) {
-          rails.push({ x, y: 380, w: 1100, h: 14, dir: 1, speed: railSpeed });
-          addRings(rings, x + 120, 330, 7, 170);
+      while (x < cfg.width - 1500) {
+        const roll = segment % 6;
 
-          railSpeed++;
-          if (railSpeed > 26) railSpeed = 22;
-        }
+        if (roll === 0) {
+          const count = Math.min(3, 1 + Math.floor(rnd() * cfg.intensity + 1));
+          addLoopChain(x, count);
+          x += 1000 + count * 200;
+        } else if (roll === 1) {
+          const len = 500 + cfg.intensity * 150 + Math.floor(rnd() * 250);
+          const turns = Math.min(4, 2 + Math.floor(rnd() * (cfg.intensity + 1)));
 
-        for (let x = 2600; x < width - 2200; x += 3800) {
-          loops.push({ cx: x, cy: 360, r: 120, pathR: 95 });
-        }
-
-        for (let x = 800; x < width - 700; x += 2300) {
-          boosters.push({ x, y: 456, w: 90, h: 24, dir: 1, power: 25 });
-        }
-
-        for (let x = 1700; x < width - 700; x += 2700) {
-          springs.push({ x, y: 456, w: 52, h: 24 });
-        }
-
-        for (let x = 3000; x < width - 800; x += 3200) {
-          spikes.push({ x, y: 456, w: 80, h: 24 });
-        }
-
-        let dir = 1;
-        for (let x = 2000; x < width - 700; x += 2300) {
-          enemies.push({
+          const c = addCorkscrew(
             x,
+            len,
+            turns,
+            90 + cfg.intensity * 5,
+            1,
+            false
+          );
+
+          addRailGlide(
+            c.endX,
+            c.topY,
+            800 + cfg.intensity * 200,
+            16 + cfg.intensity * 2
+          );
+
+          x += len + 1000;
+        } else if (roll === 2) {
+          const y = 360 - Math.floor(rnd() * 80);
+
+          addRailGlide(
+            x,
+            y,
+            900 + cfg.intensity * 200,
+            16 + cfg.intensity * 2
+          );
+
+          x += 1100;
+        } else if (roll === 3) {
+          addBoosterChain(x, 3 + cfg.intensity, 22 + cfg.intensity * 2);
+          x += 800;
+        } else if (roll === 4) {
+          addHillHop(x);
+          x += 950;
+        } else {
+          addLoopChain(x, 2);
+          addBoosterChain(x + 700, 2, 22 + cfg.intensity);
+          x += 1400;
+        }
+
+        if (x > nextCheckpoint) {
+          checkpoints.push({
+            x: Math.min(x, cfg.width - 600),
+            y: 380,
+            w: 26,
+            h: 100,
+            active: false
+          });
+
+          nextCheckpoint += 1800;
+        }
+
+        if (rnd() < 0.22) {
+          hearts.push({
+            x: x - 200,
+            y: 300,
+            taken: false
+          });
+        }
+
+        if (rnd() < 0.12) {
+          shields.push({
+            x: x - 100,
+            y: 330,
+            taken: false
+          });
+        }
+
+        if (rnd() < 0.16 && x > 1000) {
+          enemies.push({
+            x: x - 150,
             y: 446,
             w: 34,
             h: 34,
-            dir,
-            minX: x - 200,
-            maxX: x + 200,
+            dir: rnd() > 0.5 ? 1 : -1,
+            minX: x - 350,
+            maxX: x + 150,
             dead: false
           });
-          dir *= -1;
         }
 
-        for (let x = 2200; x < width - 500; x += 2300) {
-          checkpoints.push({ x, y: 380, w: 26, h: 100, active: false });
+        if (rnd() < 0.08) {
+          spikes.push({
+            x: x - 120,
+            y: 456,
+            w: 70,
+            h: 24
+          });
         }
 
-        for (let x = 2500; x < width - 500; x += 3700) {
-          hearts.push({ x, y: 310, taken: false });
-        }
+        addRings(Math.max(400, x - 500), 430, 5);
 
-        for (let x = 4200; x < width - 500; x += 4700) {
-          shields.push({ x, y: 330, taken: false });
-        }
-
-        addCorkscrew(1800, 500, 2, 90, 1);
-        addCorkscrew(4300, 700, 3, 95, 1);
-        addCorkscrew(6900, 900, 4, 100, 1);
-        addCorkscrew(9600, 650, 3, 95, 1);
-        addCorkscrew(12200, 950, 4, 105, 1);
-
-        return {
-          name,
-          width,
-          minY,
-          bottom,
-          playerStart: { x: 80, y: 320 },
-          platforms,
-          spikes,
-          springs,
-          boosters,
-          rails,
-          loops,
-          rings,
-          enemies,
-          checkpoints,
-          hearts,
-          shields,
-          corkscrews,
-          goal: { x: width - 300, y: 360, w: 40, h: 120 },
-          boss: null,
-          bullets: []
-        };
+        segment++;
       }
 
-      width = 2400;
-      name = "BOSS CORE";
-      minY = -900;
-
-      platforms.push({ x: 0, y: 480, w: width, h: 60 });
-      platforms.push({ x: 220, y: 360, w: 240, h: 24 });
-      platforms.push({ x: 880, y: 330, w: 240, h: 24 });
-      platforms.push({ x: 1540, y: 360, w: 240, h: 24 });
-      platforms.push({ x: 2000, y: 330, w: 240, h: 24 });
-
-      platforms.push({ x: 1000, y: 160, w: 400, h: 24 });
-      platforms.push({ x: 700, y: 20, w: 300, h: 24 });
-      platforms.push({ x: 1400, y: -60, w: 300, h: 24 });
-
-      addRings(rings, 250, 430, 7);
-      addRings(rings, 700, 430, 7);
-      addRings(rings, 1150, 430, 7);
-      addRings(rings, 1600, 430, 7);
-      addRings(rings, 2050, 430, 6);
-      addRings(rings, 260, 320, 4);
-      addRings(rings, 920, 290, 4);
-      addRings(rings, 1580, 320, 4);
-      addRings(rings, 2040, 290, 4);
-
-      addRings(rings, 1040, 110, 8, 45);
-      addRings(rings, 740, -30, 6, 45);
-      addRings(rings, 1440, -110, 6, 45);
-
-      hearts.push({ x: 400, y: 430, taken: false });
-      hearts.push({ x: 1200, y: 430, taken: false });
-      hearts.push({ x: 1700, y: 430, taken: false });
-      hearts.push({ x: 2200, y: 430, taken: false });
-
-      shields.push({ x: 800, y: 420, taken: false });
-      shields.push({ x: 1450, y: 420, taken: false });
-      shields.push({ x: 2100, y: 420, taken: false });
-
-      checkpoints.push({ x: 200, y: 380, w: 26, h: 100, active: false });
-
-      boosters.push({ x: 300, y: 456, w: 90, h: 24, dir: 1, power: 20 });
-      boosters.push({ x: 1500, y: 456, w: 90, h: 24, dir: -1, power: 20 });
-      boosters.push({ x: 2100, y: 456, w: 90, h: 24, dir: -1, power: 20 });
-
-      springs.push({ x: 950, y: 456, w: 52, h: 24 });
-
-      addCorkscrew(1900, 420, 2, 80, 1);
-
-      boss = createBoss();
+      for (let rx = 400; rx < cfg.width - 400; rx += 700) {
+        addRings(rings, rx, 430, 5);
+      }
 
       return {
-        name,
-        width,
-        minY,
-        bottom,
-        playerStart: { x: 100, y: 320 },
+        name: cfg.name,
+        width: cfg.width,
+        minY: -2200,
+        bottom: 540,
+        playerStart: { x: 80, y: 320 },
         platforms,
-        spikes: [],
+        spikes,
         springs,
         boosters,
-        rails: [],
-        loops: [],
+        rails,
+        loops,
         rings,
-        enemies: [],
+        enemies,
         checkpoints,
         hearts,
         shields,
         corkscrews,
-        goal: null,
-        boss,
+        goal: { x: cfg.width - 300, y: 360, w: 40, h: 120 },
+        boss: null,
         bullets: []
       };
     }
@@ -1186,6 +1188,7 @@
       controlsIdle = 0;
       controlsFaded = false;
       hurtFlash = 0;
+      bossWarned = false;
 
       let startX = level.playerStart.x;
       let startY = level.playerStart.y;
@@ -1273,6 +1276,12 @@
       if (gameState !== "play" && ["Space", "Enter"].includes(code)) {
         handleMenuButton();
       }
+
+      controlsIdle = 0;
+      if (controlsFaded && controlsEl) {
+        controlsEl.style.opacity = "1";
+        controlsFaded = false;
+      }
     }
 
     function releaseControl(code) {
@@ -1337,12 +1346,6 @@
 
         pressControl(code);
         btn.classList.add("active");
-
-        controlsIdle = 0;
-        if (controlsFaded && controlsEl) {
-          controlsEl.style.opacity = "1";
-          controlsFaded = false;
-        }
       });
 
       const release = (e) => {
@@ -1595,7 +1598,7 @@
         spawnParticles(player.x + player.w / 2, player.y + player.h, "#b3e5fc", 12, 3);
       }
 
-      if (player.jumping && !keys.Space && !gpJumpHeld && player.vy < -9) {
+      if (player.jumping && !keys.Space && player.vy < -9) {
         player.vy = -9;
       }
 
@@ -4267,7 +4270,7 @@
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fillRect(0, 0, VIEW_W, H);
 
-        drawCenterText("SPEED DASH POLISH ULTIMATE", 140, Math.min(52, VIEW_W / 10));
+        drawCenterText("SPEED DASH ULTIMATE ROLLERCOASTER", 140, Math.min(48, VIEW_W / 12));
         drawCenterText("Corkscrew • Flow • Tricks • Boss • Polish", 190, Math.min(26, VIEW_W / 26));
 
         ctx.font = `${Math.min(22, VIEW_W / 30)}px Arial`;
