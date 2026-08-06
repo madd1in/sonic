@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Speed Dash Ultimate Rollercoaster</title>
+  <title>Speed Dash Vertical More Levels</title>
   <style>
     :root {
       --ctrl-opacity: 0.72;
@@ -260,7 +260,7 @@
     });
 
     const STEP = 1 / 60;
-    const LEVEL_COUNT = 3;
+    const LEVEL_COUNT = 5;
 
     const START_LIVES = 8;
     const START_RINGS = 5;
@@ -368,13 +368,31 @@
         hill1: "#3d1f56",
         hill2: "#2a103c",
         ambient: "rgba(200,170,255,"
+      },
+      {
+        skyTop: "#00c6ff",
+        skyMid: "#0072ff",
+        skyBottom: "#001f54",
+        hill1: "#00e5ff",
+        hill2: "#0072ff",
+        ambient: "rgba(0,229,255,"
+      },
+      {
+        skyTop: "#ff00cc",
+        skyMid: "#330066",
+        skyBottom: "#000033",
+        hill1: "#ff00cc",
+        hill2: "#6600cc",
+        ambient: "rgba(255,0,255,"
       }
     ];
 
     const groundThemes = [
       { dirt: "#7b4a21", grass: "#49d651", light: "#a2ff9e" },
       { dirt: "#6d4c41", grass: "#ffb74d", light: "#ffe0b2" },
-      { dirt: "#37474f", grass: "#b0bec5", light: "#eceff1" }
+      { dirt: "#37474f", grass: "#b0bec5", light: "#eceff1" },
+      { dirt: "#0d1b3d", grass: "#00e5ff", light: "#b2fff9" },
+      { dirt: "#2a003d", grass: "#ff00cc", light: "#ffb3ff" }
     ];
 
     let audioCtx = null;
@@ -576,7 +594,7 @@
 
       stopMusic();
 
-      const p = musicPatterns[levelIndex] || musicPatterns[0];
+      const p = musicPatterns[levelIndex % musicPatterns.length];
       musicStep = 0;
 
       const stepDur = 60 / p.bpm / 2;
@@ -806,9 +824,11 @@
 
     function makeLevel(index) {
       const configs = [
-        { name: "GREEN COASTER FLOW", width: 16000, intensity: 1, boss: false },
-        { name: "RAIL SKY COASTER", width: 18000, intensity: 2, boss: false },
-        { name: "BOSS COASTER", width: 2600, intensity: 2, boss: true }
+        { name: "GREEN COASTER FLOW", width: 16000, intensity: 1, vertical: 1, boss: false },
+        { name: "RAIL SKY COASTER", width: 18000, intensity: 2, vertical: 2, boss: false },
+        { name: "VERTICAL PEAKS", width: 17000, intensity: 2, vertical: 4, boss: false },
+        { name: "NEON CLIMB", width: 20000, intensity: 3, vertical: 5, boss: false },
+        { name: "BOSS CORE", width: 3000, intensity: 3, vertical: 2, boss: true }
       ];
 
       const cfg = configs[index] || configs[0];
@@ -946,11 +966,78 @@
         addRings(x + 620, 320, 4);
       }
 
+      function addVerticalTower(x, height) {
+        springs.push({
+          x,
+          y: 456,
+          w: 52,
+          h: 24
+        });
+
+        let y = 380;
+        let px = x;
+        let dir = 1;
+
+        while (y > 480 - height) {
+          platforms.push({
+            x: px,
+            y,
+            w: 180,
+            h: 24
+          });
+
+          addRings(px + 30, y - 40, 3);
+
+          if (rnd() < 0.18) {
+            hearts.push({
+              x: px + 80,
+              y: y - 40,
+              taken: false
+            });
+          }
+
+          if (rnd() < 0.10) {
+            shields.push({
+              x: px + 80,
+              y: y - 40,
+              taken: false
+            });
+          }
+
+          px += dir * 160;
+          dir *= -1;
+          y -= 120;
+        }
+
+        const topY = y + 120;
+        const topX = px;
+
+        platforms.push({
+          x: topX - 80,
+          y: topY,
+          w: 260,
+          h: 24
+        });
+
+        checkpoints.push({
+          x: topX,
+          y: topY - 100,
+          w: 26,
+          h: 100,
+          active: false
+        });
+
+        addRings(topX, topY - 60, 5);
+
+        return { x: topX, y: topY };
+      }
+
       if (cfg.boss) {
         platforms.push(
           { x: 220, y: 360, w: 240, h: 24 },
           { x: 880, y: 330, w: 240, h: 24 },
-          { x: 1540, y: 360, w: 240, h: 24 }
+          { x: 1540, y: 360, w: 240, h: 24 },
+          { x: 2200, y: 330, w: 240, h: 24 }
         );
 
         addBoosterChain(300, 3, 20);
@@ -960,11 +1047,13 @@
         addRings(700, 430, 7);
         addRings(1150, 430, 7);
         addRings(1600, 430, 7);
+        addRings(2200, 430, 6);
 
         hearts.push(
           { x: 400, y: 430, taken: false },
           { x: 1200, y: 430, taken: false },
-          { x: 1700, y: 430, taken: false }
+          { x: 1700, y: 430, taken: false },
+          { x: 2200, y: 430, taken: false }
         );
 
         shields.push(
@@ -984,7 +1073,7 @@
         return {
           name: cfg.name,
           width: cfg.width,
-          minY: -1200,
+          minY: -1500,
           bottom: 540,
           playerStart: { x: 100, y: 320 },
           platforms,
@@ -1014,7 +1103,7 @@
       let segment = 0;
 
       while (x < cfg.width - 1500) {
-        const roll = segment % 6;
+        const roll = segment % 8;
 
         if (roll === 0) {
           const count = Math.min(3, 1 + Math.floor(rnd() * cfg.intensity + 1));
@@ -1058,6 +1147,18 @@
         } else if (roll === 4) {
           addHillHop(x);
           x += 950;
+        } else if (roll === 5 || (cfg.vertical > 2 && roll === 6)) {
+          const towerHeight = 600 + cfg.vertical * 180 + Math.floor(rnd() * 200);
+          const tower = addVerticalTower(x, towerHeight);
+
+          addRailGlide(
+            tower.x + 260,
+            tower.y + 30,
+            1000 + cfg.intensity * 200,
+            16 + cfg.intensity * 2
+          );
+
+          x += 1400;
         } else {
           addLoopChain(x, 2);
           addBoosterChain(x + 700, 2, 22 + cfg.intensity);
@@ -1126,7 +1227,7 @@
       return {
         name: cfg.name,
         width: cfg.width,
-        minY: -2200,
+        minY: -3500,
         bottom: 540,
         playerStart: { x: 80, y: 320 },
         platforms,
@@ -2655,7 +2756,7 @@
     }
 
     function drawBackground(camX) {
-      const theme = themes[currentLevel] || themes[0];
+      const theme = themes[currentLevel % themes.length];
 
       const sky = ctx.createLinearGradient(0, 0, 0, H);
       sky.addColorStop(0, theme.skyTop);
@@ -2673,7 +2774,7 @@
         ctx.fillRect(0, 0, VIEW_W, H);
       }
 
-      if (currentLevel === 2 || altitudeFactor > 0.25) {
+      if (currentLevel === 2 || currentLevel === 4 || altitudeFactor > 0.25) {
         for (let i = 0; i < 90; i++) {
           const x = mod(i * 137 - camX * 0.05, VIEW_W);
           const y = mod(i * 61 - cameraY * 0.12, H);
@@ -2685,8 +2786,8 @@
         }
       }
 
-      if (currentLevel === 2) {
-        ctx.fillStyle = "#e6e6fa";
+      if (currentLevel === 2 || currentLevel === 4) {
+        ctx.fillStyle = currentLevel === 4 ? "#ff00cc" : "#e6e6fa";
         ctx.beginPath();
         ctx.arc(VIEW_W - 150, 90, 38, 0, Math.PI * 2);
         ctx.fill();
@@ -2755,7 +2856,7 @@
       const horizonY = H - 70 - cameraY * 0.25;
       const hg = ctx.createLinearGradient(0, horizonY - 30, 0, horizonY + 40);
 
-      if (currentLevel === 2) {
+      if (currentLevel === 2 || currentLevel === 3 || currentLevel === 4) {
         hg.addColorStop(0, "rgba(0,255,255,0)");
         hg.addColorStop(0.5, "rgba(0,255,255,0.06)");
         hg.addColorStop(1, "rgba(0,255,255,0)");
@@ -2790,7 +2891,7 @@
     }
 
     function drawAmbient(camX) {
-      const theme = themes[currentLevel] || themes[0];
+      const theme = themes[currentLevel % themes.length];
 
       for (let i = 0; i < 45; i++) {
         const speed = 10 + (i % 5) * 8;
@@ -2808,7 +2909,7 @@
         ctx.fill();
       }
 
-      if (currentLevel === 0 || currentLevel === 2) {
+      if (currentLevel === 0 || currentLevel === 2 || currentLevel === 3 || currentLevel === 4) {
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
 
@@ -2839,7 +2940,7 @@
         "rgba(0,255,255,"
       ];
 
-      const base = colors[currentLevel] || colors[0];
+      const base = colors[currentLevel % colors.length];
 
       for (let i = 0; i < 6; i++) {
         const x = mod(
@@ -2906,7 +3007,7 @@
         }
       }
 
-      if (currentLevel === 2) {
+      if (currentLevel === 2 || currentLevel === 4) {
         for (let i = 0; i < 3; i++) {
           const x = mod(
             i * 420 + Math.sin(animT * 0.25 + i) * 120 - camX * 0.08,
@@ -2921,6 +3022,29 @@
 
           ctx.fillStyle = g;
           ctx.fillRect(x, 0, 180, H);
+        }
+      }
+
+      if (currentLevel === 3) {
+        ctx.strokeStyle = "rgba(0,255,255,0.08)";
+        ctx.lineWidth = 2;
+
+        const spacing = 120;
+        const offset = mod(camX * 0.3, spacing);
+
+        for (let x = -offset; x < VIEW_W + spacing; x += spacing) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, H);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = "rgba(255,0,255,0.05)";
+
+        const lineOffset = mod(animT * 100, 24);
+
+        for (let y = H - 120 - lineOffset; y < H; y += 24) {
+          ctx.fillRect(0, y, VIEW_W, 3);
         }
       }
 
@@ -3056,10 +3180,12 @@
 
           const alpha = 0.08 + 0.16 * (1 - t);
 
-          if (currentLevel === 2) {
+          if (currentLevel === 2 || currentLevel === 4) {
             ctx.strokeStyle = `rgba(0,255,255,${alpha})`;
           } else if (currentLevel === 1) {
             ctx.strokeStyle = `rgba(255,170,80,${alpha})`;
+          } else if (currentLevel === 3) {
+            ctx.strokeStyle = `rgba(0,229,255,${alpha})`;
           } else {
             ctx.strokeStyle = `rgba(120,255,180,${alpha})`;
           }
@@ -3499,7 +3625,7 @@
     }
 
     function drawWorld(camX) {
-      const gt = groundThemes[currentLevel] || groundThemes[0];
+      const gt = groundThemes[currentLevel % groundThemes.length];
 
       drawCorkscrews(camX);
 
@@ -4270,8 +4396,8 @@
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fillRect(0, 0, VIEW_W, H);
 
-        drawCenterText("SPEED DASH ULTIMATE ROLLERCOASTER", 140, Math.min(48, VIEW_W / 12));
-        drawCenterText("Corkscrew • Flow • Tricks • Boss • Polish", 190, Math.min(26, VIEW_W / 26));
+        drawCenterText("SPEED DASH VERTICAL LEVELS", 140, Math.min(48, VIEW_W / 12));
+        drawCenterText("Corkscrew • Towers • Flow • Boss • 5 Levels", 190, Math.min(26, VIEW_W / 26));
 
         ctx.font = `${Math.min(22, VIEW_W / 30)}px Arial`;
         ctx.fillStyle = "#ffffff";
