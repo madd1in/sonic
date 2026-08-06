@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Speed Dash Ultra Final</title>
+  <title>Speed Dash Vertical Spiral</title>
   <style>
     :root {
       --ctrl-opacity: 0.72;
@@ -180,7 +180,9 @@
 
     const H = 540;
     let VIEW_W = 960;
+
     let cameraX = 0;
+    let cameraY = 0;
 
     const isTouch =
       ("ontouchstart" in window) ||
@@ -326,6 +328,7 @@
       doubleUsed: false,
       loop: null,
       rail: null,
+      spiral: null,
       shield: false,
       squash: 0,
       trail: []
@@ -806,6 +809,9 @@
     function shiftLevelForMobile(lvl, dy) {
       lvl.playerStart.y += dy;
 
+      if (lvl.minY !== undefined) lvl.minY += dy;
+      if (lvl.bottom !== undefined) lvl.bottom += dy;
+
       if (lvl.platforms) lvl.platforms.forEach((p) => (p.y += dy));
       if (lvl.spikes) lvl.spikes.forEach((s) => (s.y += dy));
       if (lvl.springs) lvl.springs.forEach((s) => (s.y += dy));
@@ -819,6 +825,13 @@
       if (lvl.shields) lvl.shields.forEach((s) => (s.y += dy));
       if (lvl.goal) lvl.goal.y += dy;
 
+      if (lvl.spirals) {
+        lvl.spirals.forEach((s) => {
+          s.bottomY += dy;
+          s.topY += dy;
+        });
+      }
+
       if (lvl.boss) {
         lvl.boss.y += dy;
         lvl.boss.baseY += dy;
@@ -828,6 +841,8 @@
     function makeLevel(index) {
       let width = 10000;
       let name = "LEVEL";
+      let minY = 0;
+      let bottom = 540;
 
       const platforms = [];
       const rings = [];
@@ -840,12 +855,27 @@
       const checkpoints = [];
       const hearts = [];
       const shields = [];
+      const spirals = [];
 
       let boss = null;
 
+      function addSpiral(cx, topY, turns, r = 90) {
+        spirals.push({ cx, bottomY: 480, topY, r, turns });
+
+        platforms.push({
+          x: cx - 170,
+          y: topY,
+          w: 900,
+          h: 24
+        });
+
+        addRings(rings, cx - 130, topY - 50, 8, 120);
+      }
+
       if (index === 0) {
         width = 16000;
-        name = "GREEN DASH ULTRA";
+        name = "GREEN DASH VERTICAL";
+        minY = -1400;
 
         platforms.push({ x: 0, y: 480, w: width, h: 60 });
 
@@ -900,9 +930,28 @@
         for (let x = 4000; x < width - 500; x += 4600) {
           shields.push({ x, y: 330, taken: false });
         }
+
+        // Vertical tower
+        springs.push({ x: 3400, y: 456, w: 52, h: 24 });
+
+        platforms.push({ x: 3500, y: 350, w: 220, h: 24 });
+        platforms.push({ x: 3750, y: 230, w: 220, h: 24 });
+        platforms.push({ x: 4000, y: 110, w: 220, h: 24 });
+        platforms.push({ x: 4250, y: -10, w: 220, h: 24 });
+
+        addRings(rings, 3520, 300, 4);
+        addRings(rings, 3770, 180, 4);
+        addRings(rings, 4020, 60, 4);
+        addRings(rings, 4270, -60, 4);
+
+        // Spiral upwards
+        addSpiral(2200, -320, 2, 90);
+        addSpiral(6200, -520, 3, 95);
+        addSpiral(10200, -720, 3, 100);
       } else if (index === 1) {
         width = 18000;
-        name = "RAIL RUINS TURBO";
+        name = "RAIL RUINS SKYWARD";
+        minY = -1700;
 
         platforms.push({ x: 0, y: 480, w: width, h: 60 });
 
@@ -961,15 +1010,45 @@
         for (let x = 4200; x < width - 500; x += 4700) {
           shields.push({ x, y: 330, taken: false });
         }
+
+        // Vertical tower
+        springs.push({ x: 3600, y: 456, w: 52, h: 24 });
+
+        platforms.push({ x: 3700, y: 340, w: 220, h: 24 });
+        platforms.push({ x: 3950, y: 210, w: 220, h: 24 });
+        platforms.push({ x: 4200, y: 80, w: 220, h: 24 });
+        platforms.push({ x: 4450, y: -50, w: 220, h: 24 });
+        platforms.push({ x: 4700, y: -180, w: 220, h: 24 });
+
+        addRings(rings, 3720, 290, 4);
+        addRings(rings, 3970, 160, 4);
+        addRings(rings, 4220, 30, 4);
+        addRings(rings, 4470, -100, 4);
+        addRings(rings, 4720, -230, 4);
+
+        // Spirals and high rails
+        addSpiral(2500, -420, 2, 90);
+        addSpiral(7000, -700, 3, 100);
+        addSpiral(12000, -900, 4, 105);
+        addSpiral(16000, -600, 3, 95);
+
+        rails.push({ x: 2600, y: -380, w: 1000, h: 14, dir: 1, speed: 20 });
+        rails.push({ x: 7100, y: -660, w: 1100, h: 14, dir: 1, speed: 22 });
+        rails.push({ x: 12100, y: -860, w: 1200, h: 14, dir: 1, speed: 24 });
       } else if (index === 2) {
         width = 2400;
-        name = "BOSS CORE";
+        name = "BOSS CORE SKY";
+        minY = -800;
 
         platforms.push({ x: 0, y: 480, w: width, h: 60 });
         platforms.push({ x: 220, y: 360, w: 240, h: 24 });
         platforms.push({ x: 880, y: 330, w: 240, h: 24 });
         platforms.push({ x: 1540, y: 360, w: 240, h: 24 });
         platforms.push({ x: 2000, y: 330, w: 240, h: 24 });
+
+        platforms.push({ x: 1000, y: 160, w: 400, h: 24 });
+        platforms.push({ x: 700, y: 20, w: 300, h: 24 });
+        platforms.push({ x: 1400, y: -60, w: 300, h: 24 });
 
         addRings(rings, 250, 430, 7);
         addRings(rings, 700, 430, 7);
@@ -980,6 +1059,10 @@
         addRings(rings, 920, 290, 4);
         addRings(rings, 1580, 320, 4);
         addRings(rings, 2040, 290, 4);
+
+        addRings(rings, 1040, 110, 8, 45);
+        addRings(rings, 740, -30, 6, 45);
+        addRings(rings, 1440, -110, 6, 45);
 
         hearts.push({ x: 400, y: 430, taken: false });
         hearts.push({ x: 1200, y: 430, taken: false });
@@ -996,10 +1079,15 @@
         boosters.push({ x: 1500, y: 456, w: 90, h: 24, dir: -1, power: 20 });
         boosters.push({ x: 2100, y: 456, w: 90, h: 24, dir: -1, power: 20 });
 
+        springs.push({ x: 950, y: 456, w: 52, h: 24 });
+
+        addSpiral(2000, -260, 2, 80);
+
         boss = createBoss();
       } else {
         width = 22000;
-        name = "NEON FLOW INFINITE X";
+        name = "NEON FLOW SPIRAL INFINITY";
+        minY = -2200;
 
         platforms.push({ x: 0, y: 480, w: width, h: 60 });
 
@@ -1064,11 +1152,31 @@
         for (let x = 5000; x < width - 500; x += 5200) {
           shields.push({ x, y: 330, taken: false });
         }
+
+        // Many spiral ascensions
+        addSpiral(2000, -420, 2, 90);
+        addSpiral(4500, -650, 3, 95);
+        addSpiral(7200, -900, 3, 100);
+        addSpiral(9800, -1150, 4, 105);
+        addSpiral(12400, -850, 3, 100);
+        addSpiral(15000, -1250, 4, 110);
+        addSpiral(17600, -700, 3, 95);
+        addSpiral(20200, -1000, 4, 105);
+
+        // High neon rails
+        rails.push({ x: 2100, y: -380, w: 1000, h: 14, dir: 1, speed: 22 });
+        rails.push({ x: 4600, y: -610, w: 1100, h: 14, dir: 1, speed: 24 });
+        rails.push({ x: 7300, y: -860, w: 1200, h: 14, dir: 1, speed: 26 });
+        rails.push({ x: 9900, y: -1110, w: 1300, h: 14, dir: 1, speed: 27 });
+        rails.push({ x: 12500, y: -810, w: 1200, h: 14, dir: 1, speed: 25 });
+        rails.push({ x: 15100, y: -1210, w: 1300, h: 14, dir: 1, speed: 27 });
       }
 
       const lvl = {
         name,
         width,
+        minY,
+        bottom,
         playerStart: { x: 80, y: 320 },
         platforms,
         spikes,
@@ -1081,6 +1189,7 @@
         checkpoints,
         hearts,
         shields,
+        spirals,
         goal: index === 2 ? null : { x: width - 300, y: 360, w: 40, h: 120 },
         boss,
         bullets: []
@@ -1091,6 +1200,17 @@
       }
 
       return lvl;
+    }
+
+    function clampCameraY(target) {
+      if (!level) return 0;
+
+      const minCamY = level.minY !== undefined ? level.minY : 0;
+      const maxCamY = (level.bottom !== undefined ? level.bottom : H) - H;
+
+      if (maxCamY <= minCamY) return 0;
+
+      return Math.max(minCamY, Math.min(maxCamY, target));
     }
 
     function loadLevel(index) {
@@ -1141,6 +1261,7 @@
       player.doubleUsed = false;
       player.loop = null;
       player.rail = null;
+      player.spiral = null;
       player.shield = false;
       player.squash = 0;
 
@@ -1152,6 +1273,8 @@
       } else {
         cameraX = (level.width - VIEW_W) / 2;
       }
+
+      cameraY = clampCameraY(player.y + player.h / 2 - H * 0.55);
     }
 
     function handleMenuButton() {
@@ -1419,6 +1542,10 @@
       flowHeat = 0;
       flowMaxed = false;
 
+      player.spiral = null;
+      player.loop = null;
+      player.rail = null;
+
       spawnParticles(player.x + player.w / 2, player.y + player.h / 2, "#ff5252", 26, 7);
 
       if (lives <= 0) {
@@ -1624,6 +1751,45 @@
       }
     }
 
+    function updateSpiral() {
+      const s = player.spiral;
+      if (!s) return;
+
+      const angular = s.speed / s.r;
+
+      s.progress += angular;
+
+      const t = Math.min(1, s.progress / s.totalAngle);
+      const cy = s.cyStart + (s.cyEnd - s.cyStart) * t;
+
+      s.angle -= s.dir * angular;
+
+      player.x = s.cx + Math.cos(s.angle) * s.r - player.w / 2;
+      player.y = cy + Math.sin(s.angle) * s.r - player.h / 2;
+
+      player.vx = s.dir * s.speed;
+      player.vy = 0;
+      player.onGround = false;
+      player.rolling = false;
+      player.facing = s.dir;
+
+      player.spinAngle += 0.55;
+
+      if (s.progress >= s.totalAngle) {
+        player.spiral = null;
+
+        player.x = s.cx - player.w / 2;
+        player.y = s.cyEnd + s.r - player.h / 2;
+
+        player.vx = s.dir * s.speed;
+        player.vy = -3;
+        player.onGround = false;
+        player.doubleUsed = false;
+
+        spawnParticles(player.x + player.w / 2, player.y + player.h, "#80d8ff", 16, 5);
+      }
+    }
+
     function collectRings() {
       const pcx = player.x + player.w / 2;
       const pcy = player.y + player.h / 2;
@@ -1719,7 +1885,7 @@
     }
 
     function checkBoosters() {
-      if (player.loop || player.rail) return;
+      if (player.loop || player.rail || player.spiral) return;
 
       for (const b of level.boosters) {
         if (intersects(player, b)) {
@@ -1736,7 +1902,7 @@
     }
 
     function checkSprings() {
-      if (player.loop || player.rail) return;
+      if (player.loop || player.rail || player.spiral) return;
 
       for (const s of level.springs) {
         if (intersects(player, s) && player.vy >= 0) {
@@ -1751,7 +1917,7 @@
     }
 
     function checkRails() {
-      if (player.loop || player.rail) return;
+      if (player.loop || player.rail || player.spiral) return;
       if (player.vy < -1) return;
 
       for (const r of level.rails) {
@@ -1772,7 +1938,7 @@
     }
 
     function checkLoops() {
-      if (player.loop || player.rail || !player.onGround) return;
+      if (player.loop || player.rail || player.spiral || !player.onGround) return;
 
       const pcx = player.x + player.w / 2;
       const pcy = player.y + player.h / 2;
@@ -1802,6 +1968,39 @@
       }
     }
 
+    function checkSpirals() {
+      if (player.loop || player.rail || player.spiral || !player.onGround) return;
+
+      const pcx = player.x + player.w / 2;
+      const feetY = player.y + player.h;
+
+      for (const s of level.spirals) {
+        if (
+          Math.abs(pcx - s.cx) < 44 &&
+          Math.abs(feetY - s.bottomY) < 36 &&
+          Math.abs(player.vx) > 8
+        ) {
+          player.spiral = {
+            cx: s.cx,
+            cyStart: s.bottomY - s.r,
+            cyEnd: s.topY - s.r,
+            r: s.r,
+            angle: Math.PI / 2,
+            progress: 0,
+            totalAngle: s.turns * Math.PI * 2,
+            speed: Math.max(10, Math.abs(player.vx)),
+            dir: Math.sign(player.vx) || 1
+          };
+
+          sfxBoost();
+          spawnParticles(pcx, feetY, "#80d8ff", 18, 5);
+          addPopup(pcx, player.y - 30, "SPIRAL UP!", "#80d8ff");
+
+          break;
+        }
+      }
+    }
+
     function updateEnemies() {
       if (!level.enemies) return;
 
@@ -1814,7 +2013,7 @@
           e.dir *= -1;
         }
 
-        if (!player.loop && !player.rail && intersects(player, e)) {
+        if (!player.loop && !player.rail && !player.spiral && intersects(player, e)) {
           const attack =
             player.autoBoost > 0 ||
             player.rolling ||
@@ -2014,7 +2213,7 @@
         }
       }
 
-      if (!player.loop && !player.rail && intersects(player, b)) {
+      if (!player.loop && !player.rail && !player.spiral && intersects(player, b)) {
         if (b.vulnerable && b.invuln <= 0) {
           damageBoss(b);
         } else if (!b.vulnerable && b.invuln <= 0) {
@@ -2038,12 +2237,12 @@
         b.x += b.vx;
         b.y += b.vy;
 
-        if (b.x < -100 || b.x > level.width + 100 || b.y > H + 200 || b.y < -100) {
+        if (b.x < -100 || b.x > level.width + 100 || b.y > level.bottom + 200 || b.y < level.minY - 200) {
           level.bullets.splice(i, 1);
           continue;
         }
 
-        if (!player.loop && !player.rail && intersects(player, b)) {
+        if (!player.loop && !player.rail && !player.spiral && intersects(player, b)) {
           if (attack) {
             combo++;
             comboTimer = 2;
@@ -2061,7 +2260,7 @@
     }
 
     function checkSpikes() {
-      if (player.loop || player.rail) return;
+      if (player.loop || player.rail || player.spiral) return;
 
       for (const s of level.spikes) {
         const hit = {
@@ -2078,7 +2277,7 @@
     }
 
     function checkGoal() {
-      if (player.loop || player.rail) return;
+      if (player.loop || player.rail || player.spiral) return;
 
       if (level.goal && intersects(player, level.goal)) {
         gameState = "levelClear";
@@ -2091,6 +2290,7 @@
         score += Math.max(0, 25000 - Math.floor(time * 10));
         score += Math.floor(level.width / 8);
         score += Math.floor(flowHeat * 1200);
+        score += Math.floor(Math.max(0, -cameraY) / 10);
 
         const colors = ["#ffd54f", "#ff80ab", "#80d8ff", "#b9f6ca"];
 
@@ -2130,7 +2330,8 @@
         flowHeat > 0.65 ||
         ringStorm > 0 ||
         player.loop ||
-        player.rail;
+        player.rail ||
+        player.spiral;
 
       if (fast) {
         player.trail.push({
@@ -2215,7 +2416,9 @@
         }
       }
 
-      if (player.loop) {
+      if (player.spiral) {
+        updateSpiral();
+      } else if (player.loop) {
         updateLoop();
       } else if (player.rail) {
         updateRail();
@@ -2225,6 +2428,7 @@
         checkSprings();
         checkRails();
         checkLoops();
+        checkSpirals();
       }
 
       if (!wasGround && player.onGround && prevVy > 11) {
@@ -2245,6 +2449,20 @@
         spawnParticles(player.x + player.w / 2, player.y + player.h, "#ffe082", 2, 2);
       }
 
+      if (player.spiral && Math.random() < 0.35) {
+        spawnParticles(player.x + player.w / 2, player.y + player.h / 2, "#80d8ff", 2, 3);
+      }
+
+      if (player.vy < -10 && Math.random() < 0.30) {
+        spawnParticles(
+          player.x + player.w / 2,
+          player.y + player.h,
+          "#b3e5fc",
+          1,
+          2
+        );
+      }
+
       const sp = Math.abs(player.vx);
 
       if (sp > 18 && Math.random() < 0.35) {
@@ -2260,6 +2478,7 @@
       if (
         player.rail ||
         player.loop ||
+        player.spiral ||
         player.autoBoost > 0 ||
         (player.onGround && sp > 10) ||
         (!player.onGround && sp > 13)
@@ -2286,7 +2505,7 @@
         boostMeter = Math.min(1, boostMeter + STEP * (0.25 + flowHeat * 0.18));
       }
 
-      if (player.rail || player.loop) {
+      if (player.rail || player.loop || player.spiral) {
         boostMeter = Math.min(1, boostMeter + STEP * 0.40);
       }
 
@@ -2337,7 +2556,7 @@
       updateTrail();
       updatePopups();
 
-      if (player.y > H + 320) {
+      if (player.y > level.bottom + 320) {
         killPlayer();
       }
 
@@ -2407,17 +2626,27 @@
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, VIEW_W, H);
 
-      if (currentLevel === 2) {
-        for (let i = 0; i < 80; i++) {
+      const altitude = Math.max(0, -cameraY);
+      const altitudeFactor = Math.min(1, altitude / 1400);
+
+      if (altitudeFactor > 0.05) {
+        ctx.fillStyle = `rgba(5,8,30,${altitudeFactor * 0.35})`;
+        ctx.fillRect(0, 0, VIEW_W, H);
+      }
+
+      if (currentLevel === 2 || altitudeFactor > 0.25) {
+        for (let i = 0; i < 90; i++) {
           const x = mod(i * 137 - camX * 0.05, VIEW_W);
-          const y = (i * 61) % 240 + 15;
+          const y = mod(i * 61 - cameraY * 0.12, H);
           const size = (i % 3) + 1;
           const a = 0.35 + 0.35 * Math.sin(animT * 2 + i);
 
           ctx.fillStyle = `rgba(255,255,255,${Math.max(0.08, a)})`;
           ctx.fillRect(x, y, size, size);
         }
+      }
 
+      if (currentLevel === 2) {
         ctx.fillStyle = "#e6e6fa";
         ctx.beginPath();
         ctx.arc(VIEW_W - 150, 90, 38, 0, Math.PI * 2);
@@ -2429,7 +2658,7 @@
         ctx.fill();
       } else {
         const sunX = VIEW_W - 160 - mod(camX * 0.03, 40);
-        const sunY = 90;
+        const sunY = 90 - cameraY * 0.04;
 
         ctx.fillStyle = "rgba(255,255,180,0.32)";
         ctx.beginPath();
@@ -2458,31 +2687,33 @@
 
       for (let i = 0; i < 6; i++) {
         const x = mod(i * 320 - camX * 0.12, VIEW_W + 320) - 160;
-        const y = 60 + i * 22;
+        const y = 60 + i * 22 - cameraY * 0.08;
         drawCloud(x, y);
       }
 
       ctx.fillStyle = theme.hill1;
       const off1 = mod(camX * 0.22, 560);
+      const hillY1 = H + 130 - cameraY * 0.18;
 
       for (let i = -1; i <= Math.ceil(VIEW_W / 560) + 1; i++) {
         const x = i * 560 - off1;
         ctx.beginPath();
-        ctx.arc(x, H + 130, 230, 0, Math.PI * 2);
+        ctx.arc(x, hillY1, 230, 0, Math.PI * 2);
         ctx.fill();
       }
 
       ctx.fillStyle = theme.hill2;
       const off2 = mod(camX * 0.42, 420);
+      const hillY2 = H + 160 - cameraY * 0.30;
 
       for (let i = -1; i <= Math.ceil(VIEW_W / 420) + 1; i++) {
         const x = i * 420 - off2;
         ctx.beginPath();
-        ctx.arc(x, H + 160, 190, 0, Math.PI * 2);
+        ctx.arc(x, hillY2, 190, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      const horizonY = H - 70;
+      const horizonY = H - 70 - cameraY * 0.25;
       const hg = ctx.createLinearGradient(0, horizonY - 30, 0, horizonY + 40);
 
       if (currentLevel === 3) {
@@ -2526,7 +2757,7 @@
         const speed = 10 + (i % 5) * 8;
 
         const x = mod(i * 211 + animT * speed - camX * 0.28, VIEW_W);
-        const y = mod(i * 97 + Math.sin(animT + i) * 18, H);
+        const y = mod(i * 97 + Math.sin(animT + i) * 18 - cameraY * 0.18, H);
 
         const a = 0.06 + 0.08 * Math.sin(animT * 2 + i);
         const size = (i % 3) + 1;
@@ -2544,7 +2775,7 @@
 
         for (let i = 0; i < 18; i++) {
           const x = mod(i * 250 + animT * 30 - camX * 0.2, VIEW_W);
-          const y = mod(i * 120 + Math.sin(animT * 2 + i) * 30, H);
+          const y = mod(i * 120 + Math.sin(animT * 2 + i) * 30 - cameraY * 0.22, H);
           const a = 0.04 + 0.04 * Math.sin(animT * 4 + i);
 
           ctx.fillStyle = `rgba(255,255,255,${Math.max(0.01, a)})`;
@@ -2577,7 +2808,7 @@
           VIEW_W + 400
         ) - 200;
 
-        const y = 70 + (i * 67) % 260;
+        const y = mod(70 + (i * 67) % 260 - cameraY * 0.12, H);
         const r = 90 + (i % 3) * 45;
         const a = 0.035 + 0.02 * Math.sin(animT + i);
 
@@ -2602,7 +2833,7 @@
 
         for (let i = 0; i < 5; i++) {
           const x = mod(i * 560 - camX * 0.16, VIEW_W + 560) - 280;
-          const y = 110 + (i * 53) % 150;
+          const y = mod(110 + (i * 53) % 150 - cameraY * 0.14, H);
 
           ctx.fillStyle = "rgba(0,0,0,0.08)";
           ctx.beginPath();
@@ -2625,7 +2856,7 @@
             VIEW_W
           );
 
-          const y = H - mod(i * 120 + animT * 44, H);
+          const y = H - mod(i * 120 + animT * 44 - cameraY * 0.2, H);
           const a = 0.03 + 0.04 * Math.sin(animT * 3 + i);
 
           ctx.fillStyle = `rgba(255,140,60,${Math.max(0.01, a)})`;
@@ -2684,7 +2915,7 @@
 
         for (let i = 0; i < 10; i++) {
           const x = mod(i * 220 - animT * 650 - camX * 0.45, VIEW_W + 220) - 110;
-          const y = 50 + i * 50;
+          const y = mod(50 + i * 50 - cameraY * 0.1, H);
 
           ctx.fillRect(x, y, 140, 2);
         }
@@ -2747,6 +2978,55 @@
       ctx.restore();
     }
 
+    function drawSpirals(camX) {
+      if (!level.spirals) return;
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+
+      for (const s of level.spirals) {
+        const screenX = s.cx - camX;
+
+        if (screenX < -300 || screenX > VIEW_W + 300) continue;
+
+        const cyStart = s.bottomY - s.r;
+        const cyEnd = s.topY - s.r;
+        const steps = s.turns * 6;
+
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const cy = cyStart + (cyEnd - cyStart) * t;
+          const screenCy = cy - cameraY;
+
+          if (screenCy < -300 || screenCy > H + 300) continue;
+
+          const alpha = 0.10 + 0.16 * (1 - t);
+
+          if (currentLevel === 3) {
+            ctx.strokeStyle = `rgba(0,255,255,${alpha})`;
+          } else if (currentLevel === 1) {
+            ctx.strokeStyle = `rgba(255,170,80,${alpha})`;
+          } else {
+            ctx.strokeStyle = `rgba(120,255,180,${alpha})`;
+          }
+
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.arc(screenX, screenCy, s.r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        ctx.strokeStyle = "rgba(255,255,255,0.10)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(screenX, cyStart - cameraY);
+        ctx.lineTo(screenX, cyEnd - cameraY);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
     function drawLoop(l, camX) {
       const x = l.cx - camX;
 
@@ -2779,7 +3059,7 @@
       ctx.fillStyle = "#546e7a";
 
       for (let i = 0; i < r.w; i += 120) {
-        ctx.fillRect(x + i, r.y + 8, 7, H - (r.y + 8));
+        ctx.fillRect(x + i, r.y + 8, 7, Math.max(60, H + 200 - (r.y + 8)));
       }
 
       ctx.strokeStyle = "rgba(144,164,174,0.45)";
@@ -3169,6 +3449,8 @@
     function drawWorld(camX) {
       const gt = groundThemes[currentLevel] || groundThemes[0];
 
+      drawSpirals(camX);
+
       for (const l of level.loops) {
         drawLoop(l, camX);
       }
@@ -3290,7 +3572,7 @@
 
         let color = `rgba(90,180,255,${a})`;
 
-        if (flowHeat > 0.8 || ringStorm > 0) {
+        if (flowHeat > 0.8 || ringStorm > 0 || player.spiral) {
           const hue = (animT * 240 + t.x * 0.2) % 360;
           a = p * 0.38;
           color = `hsla(${hue}, 100%, 70%, ${a})`;
@@ -3306,7 +3588,7 @@
         ctx.arc(x, t.y, 6 * p + 2, 0, Math.PI * 2);
         ctx.fill();
 
-        if (flowHeat > 0.8 || ringStorm > 0) {
+        if (flowHeat > 0.8 || ringStorm > 0 || player.spiral) {
           ctx.fillStyle = `hsla(${(animT * 280 + t.x * 0.3) % 360}, 100%, 70%, ${a * 0.14})`;
           ctx.beginPath();
           ctx.arc(x, t.y, 20 * p + 9, 0, Math.PI * 2);
@@ -3361,7 +3643,7 @@
     function drawSpeedLines(camX) {
       const speed = Math.abs(player.vx);
 
-      if (speed < 12 && player.autoBoost <= 0 && flowHeat < 0.6 && ringStorm <= 0) return;
+      if (speed < 12 && player.autoBoost <= 0 && flowHeat < 0.6 && ringStorm <= 0 && !player.spiral) return;
 
       ctx.strokeStyle = "rgba(255,255,255,0.15)";
       ctx.lineWidth = 2;
@@ -3369,7 +3651,7 @@
       const px = player.x - camX + player.w / 2;
       const py = player.y + player.h / 2;
 
-      const count = 12 + Math.floor(flowHeat * 10) + (ringStorm > 0 ? 8 : 0);
+      const count = 12 + Math.floor(flowHeat * 10) + (ringStorm > 0 ? 8 : 0) + (player.spiral ? 8 : 0);
 
       for (let i = 0; i < count; i++) {
         const y = py - 95 + i * 15 + Math.sin(animT * 22 + i) * 4;
@@ -3529,6 +3811,7 @@
         !player.onGround ||
         player.loop ||
         player.rail ||
+        player.spiral ||
         flowHeat > 0.85;
 
       if (spinMode) {
@@ -3644,7 +3927,7 @@
         ctx.fill();
       }
 
-      if (player.autoBoost > 0 || Math.abs(player.vx) > 17) {
+      if (player.autoBoost > 0 || Math.abs(player.vx) > 17 || player.spiral) {
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
 
@@ -3704,12 +3987,13 @@
         ctx.restore();
       }
 
-      if (gameState === "play" && (flowHeat > 0.4 || player.autoBoost > 0 || ringStorm > 0)) {
+      if (gameState === "play" && (flowHeat > 0.4 || player.autoBoost > 0 || ringStorm > 0 || player.spiral)) {
         let radius =
           110 +
           flowHeat * 80 +
           (player.autoBoost > 0 ? 70 : 0) +
-          (ringStorm > 0 ? 130 : 0);
+          (ringStorm > 0 ? 130 : 0) +
+          (player.spiral ? 70 : 0);
 
         ctx.save();
 
@@ -3924,14 +4208,14 @@
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fillRect(0, 0, VIEW_W, H);
 
-        drawCenterText("SPEED DASH ULTRA FINAL", 140, Math.min(56, VIEW_W / 10));
-        drawCenterText("Turbo • Flow • Polish • Boss • Long Levels", 190, Math.min(26, VIEW_W / 26));
+        drawCenterText("SPEED DASH VERTICAL SPIRAL", 140, Math.min(54, VIEW_W / 10));
+        drawCenterText("Vertical • Spiral • Flow • Neon • Boss", 190, Math.min(26, VIEW_W / 26));
 
         ctx.font = `${Math.min(22, VIEW_W / 30)}px Arial`;
         ctx.fillStyle = "#ffffff";
 
         ctx.fillText("Links / Rechts / Jump | Gamepad supported", VIEW_W / 2, 270);
-        ctx.fillText("Halte Speed, um FLOW aufzuladen", VIEW_W / 2, 305);
+        ctx.fillText("Renne in Spiral-Ringe, um nach oben zu spiralen", VIEW_W / 2, 305);
         ctx.fillText("50 Ringe = RING STORM | Max Flow = Neon Trail", VIEW_W / 2, 340);
         ctx.fillText("M = Ton an/aus | ◐ = Button-Sichtbarkeit", VIEW_W / 2, 375);
 
@@ -3992,6 +4276,7 @@
 
     function render() {
       let targetCam = 0;
+      let targetCamY = 0;
 
       if (level) {
         const lookahead = Math.max(
@@ -4006,6 +4291,9 @@
         } else {
           targetCam = (level.width - VIEW_W) / 2;
         }
+
+        targetCamY = player.y + player.h / 2 - H * 0.55;
+        targetCamY = clampCameraY(targetCamY);
 
         const screenX = player.x + player.w / 2 - targetCam;
         const margin = Math.min(110, VIEW_W * 0.18);
@@ -4024,6 +4312,7 @@
       }
 
       cameraX += (targetCam - cameraX) * 0.18;
+      cameraY += (targetCamY - cameraY) * 0.16;
 
       const camX = cameraX;
 
@@ -4040,7 +4329,8 @@
               speed * 0.002 +
               flowHeat * 0.015 +
               (player.autoBoost > 0 ? 0.015 : 0) +
-              (ringStorm > 0 ? 0.008 : 0)
+              (ringStorm > 0 ? 0.008 : 0) +
+              (player.spiral ? 0.01 : 0)
             )
           : 1;
 
@@ -4058,6 +4348,7 @@
       ctx.translate(VIEW_W / 2, H / 2);
       ctx.scale(speedZoom, speedZoom);
       ctx.translate(-VIEW_W / 2, -H / 2);
+      ctx.translate(0, -cameraY);
 
       if (level) {
         drawWorld(camX);
@@ -4068,10 +4359,11 @@
         drawPlayer(camX);
         drawParticles(camX);
         drawPopups(camX);
-        drawForeground(camX);
       }
 
       ctx.restore();
+
+      drawForeground(camX);
 
       drawVignette();
       drawBoostEdgeGlow();
@@ -4152,6 +4444,19 @@
           ctx.fillStyle = "#80d8ff";
 
           ctx.fillText("RING STORM", 20, 90);
+
+          ctx.restore();
+        }
+
+        if (cameraY < -20) {
+          ctx.save();
+
+          ctx.globalAlpha = 0.55;
+          ctx.font = "bold 14px Arial";
+          ctx.textAlign = "right";
+          ctx.fillStyle = "#ffffff";
+
+          ctx.fillText(`ALT ${Math.floor(-cameraY / 10)}m`, VIEW_W - 20, 110);
 
           ctx.restore();
         }
